@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Отчёт по клиенту — {{ client_name }}</title>
+  <style>
+    @font-face {
+      font-family: "DejaVu Sans";
+      src: url("{{ font_regular }}");
+      font-weight: 400;
+      font-style: normal;
+    }
+
+    @font-face {
+      font-family: "DejaVu Sans";
+      src: url("{{ font_bold }}");
+      font-weight: 700;
+      font-style: normal;
+    }
+
+    @page {
+      size: A4;
+      margin: 0;
+    }
+
+    :root {
+      --ink: #1f2937;
+      --muted: #6b7280;
+      --accent-dark: #4338a5;
+      --yellow-bg: #fff8e1;
+      --yellow-border: #f0c14b;
+      --blue-bg: #e8f3ff;
+      --blue-border: #5b9bd5;
+      --check: #3b82f6;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      color: var(--ink);
+      font-family: "DejaVu Sans", Arial, sans-serif;
+      font-size: 11pt;
+      line-height: 1.45;
+      background: #fff;
+    }
+
+    @media screen {
+      body {
+        background: #b8bec6;
+        padding: 28px 16px 48px;
+      }
+
+      .page {
+        width: 210mm;
+        min-height: 297mm;
+        margin: 0 auto;
+        background: #fff;
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.28);
+        overflow: hidden;
+      }
+    }
+
+    .banner {
+      background: #5b4db8;
+      color: #fff;
+      padding: 22px 22mm 20px;
+    }
+
+    .banner-brand {
+      font-size: 9pt;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      opacity: 0.85;
+      margin-bottom: 6px;
+    }
+
+    .banner h1 {
+      margin: 0;
+      font-size: 20pt;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    .banner-meta {
+      margin-top: 8px;
+      font-size: 9.5pt;
+      opacity: 0.9;
+    }
+
+    .content {
+      padding: 16px 22mm 22mm;
+    }
+
+    .client-chip {
+      display: inline-block;
+      background: #f3f0ff;
+      color: var(--accent-dark);
+      border: 1px solid #d8d0f5;
+      border-radius: 6px;
+      padding: 8px 14px;
+      margin-bottom: 18px;
+      font-size: 11pt;
+      font-weight: 700;
+    }
+
+    .block {
+      margin-bottom: 18px;
+      page-break-inside: avoid;
+    }
+
+    .block-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 14px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .icon-topic { background: #7c6cf0; }
+    .icon-request { background: #f59e0b; }
+    .icon-budget { background: #3b82f6; }
+    .icon-reqs { background: #10b981; }
+    .icon-next { background: #64748b; }
+
+    .block-title {
+      margin: 0;
+      font-size: 11pt;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--accent-dark);
+      font-weight: 700;
+    }
+
+    .box {
+      border-radius: 8px;
+      padding: 12px 14px;
+      border: 1.5px solid;
+    }
+
+    .box-yellow {
+      background: var(--yellow-bg);
+      border-color: var(--yellow-border);
+    }
+
+    .box-blue {
+      background: var(--blue-bg);
+      border-color: var(--blue-border);
+    }
+
+    .box-label {
+      font-size: 9.5pt;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    .box-value {
+      font-size: 11.5pt;
+      white-space: pre-wrap;
+    }
+
+    .plain {
+      font-size: 11.5pt;
+      white-space: pre-wrap;
+      padding-left: 38px;
+    }
+
+    .checklist {
+      list-style: none;
+      margin: 0;
+      padding: 0 0 0 38px;
+    }
+
+    .checklist li {
+      position: relative;
+      padding: 4px 0 4px 22px;
+      font-size: 11pt;
+    }
+
+    .checklist li::before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      top: 4px;
+      color: var(--check);
+      font-weight: 700;
+    }
+
+    .footer {
+      margin-top: 24px;
+      padding-top: 10px;
+      border-top: 1px solid #e5e7eb;
+      color: var(--muted);
+      font-size: 8.5pt;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="banner">
+      <div class="banner-brand">AI Client Report Generator</div>
+      <h1>Отчёт по диалогу с клиентом</h1>
+      <div class="banner-meta">Клиент: {{ client_name }} · Сформирован: {{ generated_at }}</div>
+    </div>
+
+    <div class="content">
+      <div class="client-chip">{{ client_name }}</div>
+
+      <section class="block">
+        <div class="block-head">
+          <div class="icon icon-topic">⚙</div>
+          <h2 class="block-title">Тема разговора</h2>
+        </div>
+        <div class="plain">{{ topic }}</div>
+      </section>
+
+      <section class="block">
+        <div class="block-head">
+          <div class="icon icon-request">◎</div>
+          <h2 class="block-title">Основной запрос</h2>
+        </div>
+        <div class="box box-yellow">
+          <div class="box-label">Запрос клиента:</div>
+          <div class="box-value">{{ main_request }}</div>
+        </div>
+      </section>
+
+      <section class="block">
+        <div class="block-head">
+          <div class="icon icon-budget">⏱</div>
+          <h2 class="block-title">Сроки и бюджет</h2>
+        </div>
+        <div class="box box-blue">
+          <div class="box-label">Желаемые сроки и стоимость:</div>
+          <div class="box-value">{{ desired_timeline }}; {{ desired_cost }}</div>
+        </div>
+      </section>
+
+      <section class="block">
+        <div class="block-head">
+          <div class="icon icon-reqs">▣</div>
+          <h2 class="block-title">Требования к продукту</h2>
+        </div>
+        {% set wishes = product_wishes.replace(';', '\n').split('\n') %}
+        <ul class="checklist">
+          {% for item in wishes if item.strip() %}
+          <li>{{ item.strip() }}</li>
+          {% endfor %}
+        </ul>
+      </section>
+
+      <section class="block">
+        <div class="block-head">
+          <div class="icon icon-next">→</div>
+          <h2 class="block-title">Следующие шаги</h2>
+        </div>
+        <div class="plain">{{ next_steps }}</div>
+      </section>
+
+      <div class="footer">
+        Настроение клиента: {{ mood }}. Документ сформирован автоматически на основе транскрибации.
+      </div>
+    </div>
+  </div>
+</body>
+</html>

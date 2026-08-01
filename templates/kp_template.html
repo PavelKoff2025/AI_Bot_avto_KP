@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>{{ title }}</title>
+  <style>
+    @font-face {
+      font-family: "DejaVu Sans";
+      src: url("{{ font_regular }}");
+      font-weight: 400;
+    }
+    @font-face {
+      font-family: "DejaVu Sans";
+      src: url("{{ font_bold }}");
+      font-weight: 700;
+    }
+
+    @page {
+      size: A4;
+      margin: 12mm 14mm 14mm;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      color: #1a2332;
+      font-family: "DejaVu Sans", Arial, sans-serif;
+      font-size: 9.5pt;
+      line-height: 1.4;
+      background: #fff;
+    }
+
+    @media screen {
+      body {
+        background: #b8bec6;
+        padding: 24px 12px 40px;
+      }
+      .page {
+        width: 210mm;
+        min-height: 297mm;
+        margin: 0 auto 24px;
+        padding: 12mm 14mm 14mm;
+        background: #fff;
+        box-shadow: 0 12px 40px rgba(0,0,0,.25);
+      }
+    }
+
+    .header {
+      display: table;
+      width: 100%;
+      border-bottom: 3px solid {{ accent }};
+      padding-bottom: 10px;
+      margin-bottom: 12px;
+    }
+
+    .header-left, .header-right {
+      display: table-cell;
+      vertical-align: bottom;
+    }
+
+    .header-right { text-align: right; color: #5a6577; font-size: 8.5pt; }
+
+    .company {
+      color: {{ accent }};
+      font-size: 14pt;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    .doc-type {
+      font-size: 8.5pt;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #5a6577;
+      margin-top: 2px;
+    }
+
+    h1 {
+      margin: 10px 0 6px;
+      font-size: 15pt;
+      color: {{ accent }};
+      line-height: 1.25;
+    }
+
+    .badge {
+      display: inline-block;
+      background: {{ accent_soft }};
+      color: {{ accent }};
+      border: 1px solid {{ accent }};
+      border-radius: 4px;
+      padding: 3px 10px;
+      font-size: 8.5pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 10px;
+    }
+
+    .meta {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 12px;
+      font-size: 9pt;
+    }
+
+    .meta td {
+      padding: 3px 8px 3px 0;
+      vertical-align: top;
+    }
+
+    .meta .lbl { color: #5a6577; width: 38%; }
+    .meta .val { font-weight: 700; }
+
+    .intro {
+      background: {{ accent_soft }};
+      border-left: 4px solid {{ accent }};
+      padding: 8px 10px;
+      margin-bottom: 12px;
+      font-size: 9pt;
+    }
+
+    h2 {
+      margin: 12px 0 6px;
+      font-size: 11pt;
+      color: {{ accent }};
+      border-bottom: 1px solid #d8dee8;
+      padding-bottom: 3px;
+    }
+
+    table.items {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 6px 0 8px;
+      font-size: 8.5pt;
+    }
+
+    table.items th {
+      background: {{ accent }};
+      color: #fff;
+      text-align: left;
+      padding: 6px 7px;
+      font-weight: 700;
+    }
+
+    table.items td {
+      border-bottom: 1px solid #e5e9ef;
+      padding: 5px 7px;
+      vertical-align: top;
+    }
+
+    table.items tr:nth-child(even) td { background: #f7f9fb; }
+
+    .num { text-align: right; white-space: nowrap; }
+    .center { text-align: center; }
+
+    .total-box {
+      margin-top: 8px;
+      background: {{ accent_soft }};
+      border: 1.5px solid {{ accent }};
+      border-radius: 6px;
+      padding: 10px 12px;
+    }
+
+    .total-row {
+      display: table;
+      width: 100%;
+    }
+
+    .total-label, .total-value {
+      display: table-cell;
+      vertical-align: middle;
+    }
+
+    .total-label { font-size: 10pt; font-weight: 700; }
+    .total-value {
+      text-align: right;
+      font-size: 14pt;
+      font-weight: 700;
+      color: {{ accent }};
+    }
+
+    .total-note {
+      margin-top: 4px;
+      font-size: 8pt;
+      color: #5a6577;
+    }
+
+    ul.compact {
+      margin: 4px 0 8px;
+      padding-left: 16px;
+    }
+
+    ul.compact li { margin-bottom: 2px; }
+
+    .two-col {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .two-col td {
+      width: 50%;
+      vertical-align: top;
+      padding-right: 10px;
+    }
+
+    .two-col td:last-child { padding-right: 0; padding-left: 10px; }
+
+    .box {
+      border: 1px solid #d8dee8;
+      background: #f7f9fb;
+      padding: 8px 10px;
+      font-size: 8.5pt;
+      min-height: 70px;
+    }
+
+    .box strong { color: {{ accent }}; }
+
+    .footer {
+      margin-top: 14px;
+      padding-top: 8px;
+      border-top: 1px solid #d8dee8;
+      font-size: 7.5pt;
+      color: #5a6577;
+    }
+
+    .sign {
+      margin-top: 16px;
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 9pt;
+    }
+
+    .sign td { width: 50%; padding-top: 18px; vertical-align: top; }
+    .sign .line { border-top: 1px solid #9aa3b2; margin-top: 28px; padding-top: 4px; color: #5a6577; font-size: 8pt; }
+
+    .page-break { break-before: page; page-break-before: always; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="header">
+      <div class="header-left">
+        <div class="company">«Дом-Мастер»</div>
+        <div class="doc-type">Коммерческое предложение</div>
+      </div>
+      <div class="header-right">
+        № {{ kp_number }} от {{ date }}<br/>
+        Действительно до: {{ valid_until }}
+      </div>
+    </div>
+
+    <div class="badge">{{ variant_label }}</div>
+    <h1>{{ title }}</h1>
+
+    <table class="meta">
+      <tr><td class="lbl">Заказчик</td><td class="val">{{ client_name }}</td></tr>
+      <tr><td class="lbl">Объект</td><td class="val">{{ object_desc }}</td></tr>
+      <tr><td class="lbl">Площадь (ориентир)</td><td class="val">{{ area }}</td></tr>
+      <tr><td class="lbl">Участок</td><td class="val">{{ plot }}</td></tr>
+      <tr><td class="lbl">Менеджер</td><td class="val">{{ manager }}</td></tr>
+    </table>
+
+    <div class="intro">{{ intro }}</div>
+
+    <h2>1. Состав работ: тёплый контур</h2>
+    <table class="items">
+      <thead>
+        <tr>
+          <th style="width:6%">№</th>
+          <th style="width:44%">Наименование</th>
+          <th style="width:28%">Состав / характеристика</th>
+          <th style="width:22%" class="num">Стоимость, ₽</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in items %}
+        <tr>
+          <td class="center">{{ loop.index }}</td>
+          <td><strong>{{ item.name }}</strong></td>
+          <td>{{ item.detail }}</td>
+          <td class="num">{{ item.price_fmt }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="total-box">
+      <div class="total-row">
+        <div class="total-label">{{ total_label | default('Итого') }}</div>
+        <div class="total-value">{{ total_fmt }}</div>
+      </div>
+      <div class="total-note">{{ total_note }}</div>
+    </div>
+
+    {% if include_fz and fz_section %}
+    <h2>1.1. Фасадная отделка (ФЗ) — доп. опция включена</h2>
+    <div class="box">
+      <strong>{{ fz_section.name }}</strong> — {{ fz_section.detail }}<br/>
+      Стоимость: <strong>{{ fz_section.price_fmt }}</strong> ₽ (уже в таблице выше).<br/>
+      Состав:
+      <ul class="compact">
+        {% for x in fz_section.scope %}<li>{{ x }}</li>{% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {% if include_engineering and engineering_section %}
+    <h2>1.2. Инженерные решения (ИР) — приложение к КП</h2>
+    <div class="box">
+      <strong>{{ engineering_section.name }}</strong> — {{ engineering_section.detail }}<br/>
+      Стоимость пакета: <strong>{{ engineering_section.price_fmt }}</strong> ₽ (уже в таблице выше).<br/>
+      {% if engineering_attachment %}
+      <strong>Приложение:</strong> файл {{ engineering_attachment }}
+      (водоснабжение, канализация, отопление газ, тёплые полы, вентиляция + предварительная смета).<br/>
+      {% endif %}
+      Краткий состав:
+      <ul class="compact">
+        {% for x in engineering_section.scope %}<li>{{ x }}</li>{% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <h2>2. Что входит / не входит</h2>
+    <table class="two-col">
+      <tr>
+        <td>
+          <div class="box">
+            <strong>Входит в КП:</strong>
+            <ul class="compact">
+              {% for x in included %}<li>{{ x }}</li>{% endfor %}
+            </ul>
+          </div>
+        </td>
+        <td>
+          <div class="box">
+            <strong>Не входит (отдельно / силами заказчика):</strong>
+            <ul class="compact">
+              {% for x in excluded %}<li>{{ x }}</li>{% endfor %}
+            </ul>
+          </div>
+        </td>
+      </tr>
+    </table>
+
+    <h2>3. Сроки и условия</h2>
+    <ul class="compact">
+      {% for x in terms %}<li>{{ x }}</li>{% endfor %}
+    </ul>
+
+    <h2>4. Гарантии</h2>
+    <ul class="compact">
+      {% for x in warranty %}<li>{{ x }}</li>{% endfor %}
+    </ul>
+
+    <h2>5. Следующий шаг</h2>
+    <div class="box">{{ next_step }}</div>
+
+    <table class="sign">
+      <tr>
+        <td>
+          От «Дом-Мастер»<br/>
+          <div class="line">{{ manager }} / подпись</div>
+        </td>
+        <td>
+          С предложением ознакомлен<br/>
+          <div class="line">{{ client_name }} / подпись</div>
+        </td>
+      </tr>
+    </table>
+
+    <div class="footer">
+      КП подготовлено по итогам протокола телефонного разговора № 12/07 от 12.07.2026.
+      Цены ориентировочные для Московской области; итоговая смета уточняется после выбора проекта и выезда на участок.
+      Редактируемая HTML-версия сохранена рядом с этим PDF.
+    </div>
+  </div>
+</body>
+</html>

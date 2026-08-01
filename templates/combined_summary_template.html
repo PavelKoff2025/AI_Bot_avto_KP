@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Сводная стоимость проекта</title>
+  <style>
+    @font-face {
+      font-family: "DejaVu Sans";
+      src: url("{{ font_regular }}");
+      font-weight: 400;
+    }
+    @font-face {
+      font-family: "DejaVu Sans";
+      src: url("{{ font_bold }}");
+      font-weight: 700;
+    }
+
+    @page { size: A4; margin: 14mm 16mm; }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      color: #1a2332;
+      font-family: "DejaVu Sans", Arial, sans-serif;
+      font-size: 10pt;
+      line-height: 1.45;
+      background: #fff;
+    }
+
+    @media screen {
+      body { background: #b8bec6; padding: 24px 12px; }
+      .page {
+        width: 210mm;
+        min-height: 297mm;
+        margin: 0 auto;
+        padding: 14mm 16mm;
+        background: #fff;
+        box-shadow: 0 12px 40px rgba(0,0,0,.25);
+      }
+    }
+
+    .banner {
+      background: {{ accent }};
+      color: #fff;
+      padding: 16px 18px;
+      margin: -14mm -16mm 14px;
+      width: calc(100% + 32mm);
+    }
+
+    .banner-brand {
+      font-size: 8.5pt;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      opacity: 0.85;
+    }
+
+    .banner h1 {
+      margin: 4px 0 0;
+      font-size: 16pt;
+    }
+
+    .meta {
+      color: #5a6577;
+      font-size: 9pt;
+      margin-bottom: 12px;
+    }
+
+    .intro {
+      background: {{ accent_soft }};
+      border-left: 4px solid {{ accent }};
+      padding: 10px 12px;
+      margin-bottom: 14px;
+    }
+
+    h2 {
+      margin: 14px 0 8px;
+      font-size: 12pt;
+      color: {{ accent }};
+    }
+
+    table.costs {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 8.5pt;
+      margin-bottom: 12px;
+    }
+
+    table.costs th {
+      background: {{ accent }};
+      color: #fff;
+      text-align: left;
+      padding: 7px 6px;
+    }
+
+    table.costs td {
+      border-bottom: 1px solid #d8dee8;
+      padding: 7px 6px;
+      vertical-align: top;
+    }
+
+    table.costs tr:nth-child(even) td { background: #f7f9fb; }
+
+    .num { text-align: right; white-space: nowrap; font-weight: 700; }
+    .total-cell { color: {{ accent }}; font-size: 10pt; }
+
+    .legend {
+      border: 1px solid #d8dee8;
+      background: #f7f9fb;
+      padding: 10px 12px;
+      font-size: 9pt;
+    }
+
+    .legend li { margin-bottom: 4px; }
+
+    .footer {
+      margin-top: 18px;
+      padding-top: 8px;
+      border-top: 1px solid #d8dee8;
+      font-size: 8pt;
+      color: #5a6577;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="banner">
+      <div class="banner-brand">«Дом-Мастер» · Сводный пакет КП</div>
+      <h1>Все варианты КП в одном документе</h1>
+    </div>
+
+    <div class="meta">
+      Заказчик: <strong>{{ client_name }}</strong> · Сформирован: {{ date }}
+    </div>
+
+    <div class="intro">
+      {{ note }}
+    </div>
+
+    <h2>Полная стоимость проекта по вариантам</h2>
+    <table class="costs">
+      <thead>
+        <tr>
+          <th style="width:22%">Вариант</th>
+          <th style="width:20%" class="num">Тёплый контур, ₽</th>
+          <th style="width:18%" class="num">АР, ₽</th>
+          <th style="width:18%" class="num">ИР, ₽</th>
+          <th style="width:22%" class="num">Итого проект, ₽</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>
+            <strong>{{ row.title }}</strong><br/>
+            <span style="color:#5a6577;font-size:8pt;">{{ row.description }}</span>
+          </td>
+          <td class="num">{{ row.contour_fmt }}</td>
+          <td class="num">{{ row.ar_fmt }}</td>
+          <td class="num">{{ row.ir_fmt }}</td>
+          <td class="num total-cell">{{ row.total_fmt }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="legend">
+      <strong>Состав полной стоимости:</strong>
+      <ul>
+        <li><strong>Тёплый контур</strong> — фундамент, стены, перегородки, окна, кровля, входная дверь, рабочий комплект АР/КР.</li>
+        <li><strong>АР</strong> — разработка презентационного архитектурного решения
+          (визуализация дома + план помещений): {{ ar_price_fmt }} ₽
+          {% if with_ar %}— <em>PDF АР приложен к этому документу</em>
+          {% else %}— <em>PDF АР не прикладывался в этом сеансе</em>{% endif %}.
+        </li>
+        <li><strong>ИР</strong> — инженерные системы: водоснабжение, канализация, отопление (газ),
+          тёплые полы, вентиляция + смета: {{ ir_price_fmt }} ₽
+          {% if with_engineering %}— <em>PDF ИР приложен</em>
+          {% else %}— <em>PDF ИР не прикладывался в этом сеансе</em>{% endif %}.
+        </li>
+      </ul>
+    </div>
+
+    <h2>Содержание документа</h2>
+    <ol>
+      <li>Эта страница — сводная стоимость</li>
+      <li>КП «Базовый»</li>
+      <li>КП «Средний (оптимальный)»</li>
+      <li>КП «Средний +»</li>
+      {% if with_ar %}<li>Проект АР (визуализация и план)</li>{% endif %}
+      {% if with_engineering %}<li>Проект инженерных решений (ИР)</li>{% endif %}
+    </ol>
+
+    <div class="footer">
+      Документ подготовлен для сравнения вариантов и передачи заказчику.
+      Не является офертой; итоговая смета уточняется договором.
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Дизайн-отчёт — {{ project_name }}</title>
+  <style>
+    @font-face {
+      font-family: "DejaVu Sans";
+      src: url("{{ font_regular }}");
+      font-weight: 400;
+      font-style: normal;
+    }
+
+    @font-face {
+      font-family: "DejaVu Sans";
+      src: url("{{ font_bold }}");
+      font-weight: 700;
+      font-style: normal;
+    }
+
+    @page {
+      size: A4;
+      margin: 14mm 16mm;
+    }
+
+    :root {
+      --ink: #1a2332;
+      --muted: #5a6577;
+      --line: #d8dee8;
+      --accent: #1f4b99;
+      --accent-soft: #eaf0fa;
+      --surface: #f7f9fb;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      color: var(--ink);
+      font-family: "DejaVu Sans", Arial, sans-serif;
+      font-size: 10.5pt;
+      line-height: 1.45;
+      background: #fff;
+    }
+
+    /* Браузер: имитация листов A4 */
+    @media screen {
+      body {
+        background: #b8bec6;
+        padding: 28px 16px 48px;
+      }
+
+      .page {
+        width: 210mm;
+        min-height: 297mm;
+        margin: 0 auto 28px;
+        padding: 14mm 16mm;
+        background: #fff;
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.28);
+      }
+    }
+
+    .banner {
+      background: #1e3a8a;
+      color: #fff;
+      padding: 14px 16px;
+      margin: -14mm -16mm 14px;
+      width: calc(100% + 32mm);
+    }
+
+    @media screen {
+      .banner {
+        margin: -14mm -16mm 14px;
+      }
+    }
+
+    .banner-brand {
+      font-size: 8.5pt;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      opacity: 0.85;
+    }
+
+    .banner h1 {
+      margin: 4px 0 0;
+      font-size: 16pt;
+      font-weight: 700;
+    }
+
+    .banner-meta {
+      margin-top: 4px;
+      font-size: 9pt;
+      opacity: 0.9;
+    }
+
+    .hero {
+      background: var(--accent-soft);
+      border-left: 4px solid var(--accent);
+      padding: 10px 12px;
+      margin-bottom: 12px;
+    }
+
+    .hero-label {
+      font-size: 8pt;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--accent);
+    }
+
+    .hero-value {
+      font-size: 13pt;
+      font-weight: 700;
+    }
+
+    .hero-sub {
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 9.5pt;
+    }
+
+    .grid {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 8px;
+    }
+
+    .grid td {
+      vertical-align: top;
+      width: 50%;
+      padding: 0 6px 8px 0;
+    }
+
+    .grid td:last-child {
+      padding-right: 0;
+      padding-left: 6px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      padding: 8px 10px;
+    }
+
+    .label {
+      font-size: 8pt;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      margin-bottom: 3px;
+    }
+
+    .value {
+      font-size: 10pt;
+      white-space: pre-wrap;
+    }
+
+    .section {
+      margin-top: 8px;
+      border: 1px solid var(--line);
+      padding: 8px 10px;
+    }
+
+    .section h2 {
+      margin: 0 0 4px;
+      font-size: 10.5pt;
+      color: var(--accent);
+    }
+
+    .page-preview {
+      break-before: page;
+      page-break-before: always;
+    }
+
+    .preview-title {
+      margin: 0 0 10px;
+      font-size: 13pt;
+      color: var(--accent);
+    }
+
+    .preview-img {
+      display: block;
+      width: 100%;
+      height: 170mm;
+      object-fit: contain;
+      object-position: top center;
+      background: #f0f2f5;
+      border: 1px solid var(--line);
+    }
+
+    .prompt-box {
+      margin-top: 8px;
+      font-size: 8pt;
+      color: var(--muted);
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 28mm;
+      overflow: hidden;
+    }
+
+    .footer {
+      margin-top: 10px;
+      padding-top: 6px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 8pt;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="banner">
+      <div class="banner-brand">AI Client Report Generator · Design</div>
+      <h1>Отчёт по заказу дизайна сайта</h1>
+      <div class="banner-meta">Сформирован: {{ generated_at }}</div>
+    </div>
+
+    <section class="hero">
+      <div class="hero-label">Проект</div>
+      <div class="hero-value">{{ project_name }}</div>
+      <div class="hero-sub">Клиент: {{ client_name }} · Тип: {{ site_type }}</div>
+    </section>
+
+    <table class="grid">
+      <tr>
+        <td>
+          <div class="card">
+            <div class="label">Целевая аудитория</div>
+            <div class="value">{{ target_audience }}</div>
+          </div>
+        </td>
+        <td>
+          <div class="card">
+            <div class="label">Стиль</div>
+            <div class="value">{{ style }}</div>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <div class="card">
+            <div class="label">Желаемые сроки</div>
+            <div class="value">{{ desired_timeline }}</div>
+          </div>
+        </td>
+        <td>
+          <div class="card">
+            <div class="label">Желаемая стоимость</div>
+            <div class="value">{{ desired_cost }}</div>
+          </div>
+        </td>
+      </tr>
+    </table>
+
+    <section class="section">
+      <h2>Цветовая палитра</h2>
+      <div class="value">{{ color_palette }}</div>
+    </section>
+
+    <section class="section">
+      <h2>Основные блоки сайта</h2>
+      <div class="value">{{ key_sections }}</div>
+    </section>
+
+    <section class="section">
+      <h2>Что должно быть в финальном дизайне</h2>
+      <div class="value">{{ product_wishes }}</div>
+    </section>
+
+    <div class="footer">Страница 1 из 2 — бриф по заказу</div>
+  </div>
+
+  {% if preview_image %}
+  <div class="page page-preview">
+    <div class="banner">
+      <div class="banner-brand">AI Client Report Generator · Design</div>
+      <h1>Пример сгенерированного дизайна</h1>
+      <div class="banner-meta">{{ project_name }} · {{ generated_at }}</div>
+    </div>
+
+    <h2 class="preview-title">Визуальный референс (AI)</h2>
+    <img class="preview-img" src="{{ preview_image }}" alt="AI design preview" />
+    {% if image_prompt %}
+    <div class="prompt-box"><strong>Промпт:</strong> {{ image_prompt }}</div>
+    {% endif %}
+    <div class="footer">
+      Страница 2 из 2 — изображение сгенерировано ИИ как черновой референс.
+    </div>
+  </div>
+  {% endif %}
+</body>
+</html>

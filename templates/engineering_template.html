@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>ИР — {{ project_name }}</title>
+  <style>
+    @font-face {
+      font-family: "DejaVu Sans";
+      src: url("{{ font_regular }}");
+      font-weight: 400;
+    }
+    @font-face {
+      font-family: "DejaVu Sans";
+      src: url("{{ font_bold }}");
+      font-weight: 700;
+    }
+
+    @page { size: A4; margin: 12mm 14mm; }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      color: #1a2332;
+      font-family: "DejaVu Sans", Arial, sans-serif;
+      font-size: 9.5pt;
+      line-height: 1.4;
+      background: #fff;
+    }
+
+    @media screen {
+      body { background: #b8bec6; padding: 24px 12px 40px; }
+      .page {
+        width: 210mm;
+        min-height: 297mm;
+        margin: 0 auto 24px;
+        padding: 12mm 14mm;
+        background: #fff;
+        box-shadow: 0 12px 40px rgba(0,0,0,.25);
+      }
+    }
+
+    .header {
+      display: table;
+      width: 100%;
+      border-bottom: 3px solid {{ accent }};
+      padding-bottom: 8px;
+      margin-bottom: 10px;
+    }
+    .header-left, .header-right { display: table-cell; vertical-align: bottom; }
+    .header-right { text-align: right; color: #5a6577; font-size: 8.5pt; }
+    .company { color: {{ accent }}; font-size: 13pt; font-weight: 700; }
+    .doc-type { font-size: 8pt; text-transform: uppercase; letter-spacing: 0.08em; color: #5a6577; }
+
+    h1 { margin: 8px 0 6px; font-size: 14pt; color: {{ accent }}; }
+    .badge {
+      display: inline-block;
+      background: {{ accent_soft }};
+      color: {{ accent }};
+      border: 1px solid {{ accent }};
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-size: 8pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .meta { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 9pt; }
+    .meta td { padding: 2px 6px 2px 0; }
+    .meta .lbl { color: #5a6577; width: 34%; }
+    .meta .val { font-weight: 700; }
+
+    .intro {
+      background: {{ accent_soft }};
+      border-left: 4px solid {{ accent }};
+      padding: 8px 10px;
+      margin-bottom: 10px;
+      font-size: 9pt;
+    }
+
+    h2 {
+      margin: 10px 0 5px;
+      font-size: 10.5pt;
+      color: {{ accent }};
+      border-bottom: 1px solid #d8dee8;
+      padding-bottom: 2px;
+    }
+
+    .system {
+      border: 1px solid #d8dee8;
+      background: #f7f9fb;
+      padding: 7px 9px;
+      margin-bottom: 6px;
+      page-break-inside: avoid;
+    }
+    .system strong { color: {{ accent }}; }
+
+    table.items {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 6px 0;
+      font-size: 8pt;
+    }
+    table.items th {
+      background: {{ accent }};
+      color: #fff;
+      text-align: left;
+      padding: 5px 6px;
+    }
+    table.items td {
+      border-bottom: 1px solid #e5e9ef;
+      padding: 4px 6px;
+      vertical-align: top;
+    }
+    table.items tr:nth-child(even) td { background: #f7f9fb; }
+    .num { text-align: right; white-space: nowrap; }
+    .center { text-align: center; }
+
+    .total-box {
+      margin-top: 6px;
+      background: {{ accent_soft }};
+      border: 1.5px solid {{ accent }};
+      border-radius: 6px;
+      padding: 8px 10px;
+    }
+    .total-row { display: table; width: 100%; }
+    .total-label, .total-value { display: table-cell; vertical-align: middle; }
+    .total-label { font-size: 10pt; font-weight: 700; }
+    .total-value { text-align: right; font-size: 13pt; font-weight: 700; color: {{ accent }}; }
+    .total-note { margin-top: 3px; font-size: 7.5pt; color: #5a6577; }
+
+    .two-col { width: 100%; border-collapse: collapse; }
+    .two-col td { width: 50%; vertical-align: top; padding-right: 8px; }
+    .two-col td:last-child { padding-right: 0; padding-left: 8px; }
+
+    .box {
+      border: 1px solid #d8dee8;
+      background: #f7f9fb;
+      padding: 7px 9px;
+      font-size: 8pt;
+    }
+    ul.compact { margin: 3px 0; padding-left: 14px; }
+    ul.compact li { margin-bottom: 1px; }
+
+    .footer {
+      margin-top: 10px;
+      padding-top: 6px;
+      border-top: 1px solid #d8dee8;
+      font-size: 7.5pt;
+      color: #5a6577;
+    }
+
+    .page-break { break-before: page; page-break-before: always; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="header">
+      <div class="header-left">
+        <div class="company">«Дом-Мастер»</div>
+        <div class="doc-type">Проект инженерных решений (ИР)</div>
+      </div>
+      <div class="header-right">
+        № {{ doc_number }} от {{ date }}<br/>
+        К протоколу № 12/07
+      </div>
+    </div>
+
+    <div class="badge">{{ variant_label }}</div>
+    <h1>Инженерные системы для оптимальной эксплуатации дома</h1>
+
+    <table class="meta">
+      <tr><td class="lbl">Заказчик</td><td class="val">{{ client_name }}</td></tr>
+      <tr><td class="lbl">Объект</td><td class="val">{{ project_name }}</td></tr>
+      <tr><td class="lbl">Площадь</td><td class="val">{{ area }}</td></tr>
+      <tr><td class="lbl">Участок</td><td class="val">{{ plot_notes }}</td></tr>
+    </table>
+
+    <div class="intro">{{ intro }}</div>
+
+    <h2>1. Состав систем</h2>
+    <div class="system"><strong>Водоснабжение.</strong> {{ water_supply }}</div>
+    <div class="system"><strong>Канализация.</strong> {{ sewerage }}</div>
+    <div class="system"><strong>Отопление (газ).</strong> {{ heating_gas }}</div>
+    <div class="system"><strong>Тёплые полы.</strong> {{ floor_heating }}</div>
+    <div class="system"><strong>Вентиляция.</strong> {{ ventilation }}</div>
+
+    <h2>2. Допущения и риски</h2>
+    <div class="system"><strong>Допущения:</strong> {{ assumptions }}</div>
+    <div class="system"><strong>Риски / уточнить:</strong> {{ risks }}</div>
+
+    <div class="footer">Страница 1 — описание систем. Смета — на следующей странице.</div>
+  </div>
+
+  <div class="page page-break">
+    <div class="header">
+      <div class="header-left">
+        <div class="company">«Дом-Мастер»</div>
+        <div class="doc-type">Предварительная смета ИР · базовый вариант</div>
+      </div>
+      <div class="header-right">№ {{ doc_number }} · {{ date }}</div>
+    </div>
+
+    <h2>3. Предварительная смета (базовый вариант)</h2>
+    <table class="items">
+      <thead>
+        <tr>
+          <th style="width:10%">Код</th>
+          <th style="width:28%">Система</th>
+          <th style="width:42%">Состав</th>
+          <th style="width:20%" class="num">Стоимость, ₽</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in items %}
+        <tr>
+          <td class="center">{{ item.code }}</td>
+          <td><strong>{{ item.name }}</strong></td>
+          <td>{{ item.detail }}</td>
+          <td class="num">{{ item.price_fmt }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="total-box">
+      <div class="total-row">
+        <div class="total-label">Итого предварительная смета ИР</div>
+        <div class="total-value">{{ total_fmt }}</div>
+      </div>
+      <div class="total-note">{{ total_note }}</div>
+    </div>
+
+    <h2>4. Что входит / не входит</h2>
+    <table class="two-col">
+      <tr>
+        <td>
+          <div class="box">
+            <strong>Входит:</strong>
+            <ul class="compact">
+              {% for x in included %}<li>{{ x }}</li>{% endfor %}
+            </ul>
+          </div>
+        </td>
+        <td>
+          <div class="box">
+            <strong>Не входит:</strong>
+            <ul class="compact">
+              {% for x in excluded %}<li>{{ x }}</li>{% endfor %}
+            </ul>
+          </div>
+        </td>
+      </tr>
+    </table>
+
+    <h2>5. Следующий шаг</h2>
+    <div class="box">{{ next_steps }}</div>
+
+    <div class="footer">
+      Документ можно приложить к коммерческому предложению (опция --with-engineering).
+      Цены ориентировочные для Московской области; финал — после обмера и выбора оборудования.
+    </div>
+  </div>
+</body>
+</html>
