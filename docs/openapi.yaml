@@ -1,0 +1,403 @@
+openapi: 3.1.0
+jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
+info:
+  title: AI Autogeneration API
+  summary: HTTP API генерации PDF-отчётов, АР, ИР и коммерческих предложений
+  description: |
+    HTTP API проекта **AI_Auogeneration** («Дом-Мастер»).
+
+    Реализации с одинаковым контрактом:
+    - **Go:** `go_server/` (по умолчанию `http://127.0.0.1:5001`)
+    - **Python Flask:** `flask_app.py` (по умолчанию `http://127.0.0.1:5000`)
+
+    Генерация документов выполняется через OpenAI + Jinja2 + WeasyPrint
+    (пакет `utils/`). Ответы с PDF отдаются как бинарный download;
+    `/api/kp` возвращает JSON со списком относительных путей к файлам.
+
+    ### Авторизация
+    Если задан `FLASK_API_TOKEN` или `API_TOKEN`:
+    - заголовок `X-API-Token: <token>`, **или**
+    - `Authorization: Bearer <token>`.
+
+    Без токена API доступен **только с localhost** (`127.0.0.1` / `::1`).
+    Эндпоинт `/health` авторизации не требует.
+
+    ### Лимиты
+    Максимальный размер тела запроса: **2 000 000 байт** (~2 МБ).
+    Генерация АР с изображениями может занимать несколько минут.
+  version: 1.0.0
+  contact:
+    name: PavelKoff2025
+    url: https://github.com/PavelKoff2025
+  license:
+    name: MIT
+    identifier: MIT
+
+externalDocs:
+  description: Документация Go-сервера и полная документация проекта
+  url: https://github.com/PavelKoff2025/AI_Bot_avto_KP
+
+servers:
+  - url: http://127.0.0.1:5001
+    description: Go API server (go_server), порт по умолчанию
+  - url: http://127.0.0.1:5000
+    description: Flask API (flask_app.py / main.py --serve)
+  - url: http://{host}:{port}
+    description: Произвольный хост/порт
+    variables:
+      host:
+        default: 127.0.0.1
+      port:
+        default: "5001"
+        enum: ["5000", "5001", "8080"]
+
+tags:
+  - name: System
+    description: Служебные эндпоинты
+  - name: Reports
+    description: Генерация PDF-отчётов (client / design / AR / engineering)
+  - name: KP
+    description: Генерация коммерческих предложений (тёплый контур ± ФЗ/ИР)
+
+paths:
+  /health:
+    get:
+      tags: [System]
+      operationId: getHealth
+      summary: Проверка живости сервиса
+      description: Не требует API-токена.
+      security: []
+      responses:
+        "200":
+          description: Сервис доступен
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              examples:
+                ok:
+                  value:
+                    status: ok
+
+  /api/report:
+    post:
+      tags: [Reports]
+      operationId: createReport
+      summary: Сгенерировать PDF-отчёт
+      description: |
+        Принимает транскрибацию диалога и тип документа.
+        Возвращает готовый PDF (`Content-Disposition: attachment`).
+
+        Поддерживаемые форматы тела:
+        1. `application/json` — поля `text`, `type`
+        2. `multipart/form-data` — поля `file` и/или `text`, опционально `type`
+        3. `application/x-www-form-urlencoded` — `text`, `type`
+      security:
+        - ApiTokenHeader: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReportJSONRequest"
+            examples:
+              ar:
+                summary: Архитектурное решение
+                value:
+                  text: >
+                    Заказчик Иван, одноэтажный современный дом ~130 м²,
+                    участок в МО, бюджет около 8 млн, нужен тёплый контур.
+                  type: ar
+              client:
+                summary: Клиентский отчёт
+                value:
+                  text: "Краткий диалог с клиентом…"
+                  type: client
+              engineering:
+                summary: Инженерные решения (алиас ir)
+                value:
+                  text: "Диалог про инженерию дома…"
+                  type: ir
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/ReportMultipartRequest"
+            encoding:
+              file:
+                contentType: text/plain
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text:
+                  type: string
+                type:
+                  $ref: "#/components/schemas/ReportTypeInput"
+      responses:
+        "200":
+          description: PDF успешно сгенерирован
+          headers:
+            Content-Disposition:
+              description: Имя файла вложения
+              schema:
+                type: string
+                examples:
+                  - attachment; filename="ar_2026-08-04_16-30-00.pdf"
+          content:
+            application/pdf:
+              schema:
+                type: string
+                contentMediaType: application/pdf
+                contentEncoding: binary
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "413":
+          description: Тело запроса превышает лимит 2 МБ
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/kp:
+    post:
+      tags: [KP]
+      operationId: createKP
+      summary: Сгенерировать комплект коммерческих предложений
+      description: |
+        Создаёт три варианта КП (базовый / средний+ / оптимальный) в уникальной
+        подпапке `reports/kp/batch_*`.
+
+        Опционально:
+        - `with_fz` — фасадная отделка в смете
+        - `with_engineering` — пакет ИР в смете + PDF-приложение
+        - `text` — транскрибация для AI-брифа ИР
+        - `client_name` — имя заказчика в документах
+      security:
+        - ApiTokenHeader: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KPRequest"
+            examples:
+              basic:
+                summary: Только тёплый контур
+                value:
+                  with_fz: false
+                  with_engineering: false
+                  client_name: Иван
+              with_ir:
+                summary: КП + инженерка
+                value:
+                  with_fz: false
+                  with_engineering: true
+                  client_name: Иван
+                  text: >
+                    Заказчик Иван, дом ~130 м², газ на участке нет,
+                    электричество есть, нужны тёплые полы.
+      responses:
+        "200":
+          description: КП сформированы
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KPResponse"
+              examples:
+                with_engineering:
+                  value:
+                    with_fz: false
+                    with_engineering: true
+                    files:
+                      - reports/kp/batch_20260804_163000/KP_01_gazobeton_bazovyy_with_ir.pdf
+                      - reports/kp/batch_20260804_163000/KP_02_gazobeton_sredniy_plus_with_ir.pdf
+                      - reports/kp/batch_20260804_163000/KP_03_kleenyy_brus_sredniy_with_ir.pdf
+                      - reports/kp/batch_20260804_163000/attachment_IR_engineering.pdf
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+components:
+  securitySchemes:
+    ApiTokenHeader:
+      type: apiKey
+      in: header
+      name: X-API-Token
+      description: |
+        Значение из `FLASK_API_TOKEN` или `API_TOKEN` в `.env`.
+        Если переменная не задана, схема не требуется (только localhost).
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+      description: Альтернатива заголовку `X-API-Token` (`Authorization: Bearer <token>`).
+
+  responses:
+    BadRequest:
+      description: Некорректный запрос (пустой текст, неизвестный type, битый JSON)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            needText:
+              value:
+                error: Передайте text или file
+            badType:
+              value:
+                error: "Тип: client | design | ar | engineering (или 1–4 / ir)"
+            badJSON:
+              value:
+                error: Некорректный JSON
+    Unauthorized:
+      description: Нет или неверный API-токен / запрос не с localhost без токена
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            badToken:
+              value:
+                error: Неверный или отсутствующий API-токен
+            needTokenRemote:
+              value:
+                error: Задайте FLASK_API_TOKEN / API_TOKEN в .env для доступа не с localhost
+    InternalError:
+      description: Внутренняя ошибка генерации (детали только в логах сервера)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            generic:
+              value:
+                error: Внутренняя ошибка сервера
+
+  schemas:
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          const: ok
+          examples: [ok]
+
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: Сообщение об ошибке для клиента
+          examples:
+            - Передайте text или file
+
+    ReportType:
+      type: string
+      description: Канонический тип отчёта после нормализации
+      enum: [client, design, ar, engineering]
+
+    ReportTypeInput:
+      type: string
+      description: |
+        Тип документа. Допускаются канонические имена и алиасы:
+        `1`/`client`, `2`/`design`, `3`/`ar`, `4`/`engineering`/`ir`.
+      enum:
+        - client
+        - design
+        - ar
+        - engineering
+        - ir
+        - "1"
+        - "2"
+        - "3"
+        - "4"
+      default: client
+      examples: [ar]
+
+    ReportJSONRequest:
+      type: object
+      additionalProperties: false
+      required: [text]
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 200000
+          description: Текст транскрибации диалога с клиентом
+          examples:
+            - Заказчик Иван, дом 130 м², бюджет 8 млн…
+        type:
+          $ref: "#/components/schemas/ReportTypeInput"
+
+    ReportMultipartRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        text:
+          type: string
+          description: Текст транскрибации (альтернатива file)
+        type:
+          $ref: "#/components/schemas/ReportTypeInput"
+        file:
+          type: string
+          contentMediaType: text/plain
+          contentEncoding: binary
+          description: Файл `.txt` с транскрибацией (лимит 2 МБ)
+      description: |
+        Нужно передать хотя бы одно из полей `text` или `file`.
+
+    KPRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        with_fz:
+          type: boolean
+          default: false
+          description: Включить фасадную отделку (ФЗ) в смету КП
+        with_engineering:
+          type: boolean
+          default: false
+          description: Включить пакет ИР в смету и приложить PDF инженерки
+        text:
+          type: string
+          description: Опциональная транскрибация для AI-брифа ИР
+          maxLength: 200000
+        client_name:
+          type: string
+          maxLength: 80
+          description: Имя заказчика в документах
+          default: Заказчик
+          examples: [Иван]
+
+    KPResponse:
+      type: object
+      additionalProperties: false
+      required: [with_fz, with_engineering, files]
+      properties:
+        with_fz:
+          type: boolean
+        with_engineering:
+          type: boolean
+        files:
+          type: array
+          description: |
+            Относительные пути к сгенерированным файлам
+            (от корня Python-проекта). Абсолютные пути не возвращаются.
+          minItems: 1
+          items:
+            type: string
+            examples:
+              - reports/kp/batch_20260804_163000/KP_01_gazobeton_bazovyy.pdf

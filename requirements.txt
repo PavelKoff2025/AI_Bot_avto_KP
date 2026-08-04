@@ -1,7 +1,27 @@
-openai>=1.40.0
-jinja2>=3.1.4
-weasyprint>=62.3
-python-dotenv>=1.0.1
-flask>=3.0.3
-aiogram>=3.13.0
-pypdf>=5.0.0
+# Python dependencies — AI_Auogeneration / AI Bot автогенерация КП
+# Python >= 3.11
+#
+# Установка:
+#   python3 -m venv .venv
+#   source .venv/bin/activate
+#   pip install -r requirements.txt
+#
+# WeasyPrint также требует системные библиотеки (cairo, pango, gdk-pixbuf).
+# См. docs/DOCUMENTATION.md → раздел «Требования».
+
+# --- LLM / HTTP ---
+openai>=1.40.0,<3
+# OpenAI SDK тянет httpx / pydantic транзитивно
+
+# --- Telegram bot ---
+aiogram>=3.13.0,<4
+# aiogram тянет aiohttp, magic-filter, pydantic
+
+# --- PDF pipeline ---
+jinja2>=3.1.4,<4
+weasyprint>=62.3,<70
+pypdf>=5.0.0,<7
+
+# --- Config / API ---
+python-dotenv>=1.0.1,<2
+flask>=3.0.3,<4

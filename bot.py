@@ -25,6 +25,11 @@ from dotenv import load_dotenv
 import os
 
 from utils.combined_document import build_combined_document
+from utils.config import (
+    DEFAULT_CLIENT_NAME,
+    sanitize_client_name,
+    telegram_allowed_ids,
+)
 from utils.kp_generator import BOT_VARIANTS
 from utils.logging_setup import get_logger, setup_logging
 from utils.package_builder import build_manager_package
@@ -35,6 +40,52 @@ setup_logging()
 logger = get_logger("bot")
 
 PROJECT_ROOT = Path(__file__).resolve().parent
+
+# Антидребезг: один тяжёлый job на пользователя
+_user_locks: dict[int, asyncio.Lock] = {}
+
+
+def _lock_for(user_id: int | None) -> asyncio.Lock:
+    uid = user_id or 0
+    if uid not in _user_locks:
+        _user_locks[uid] = asyncio.Lock()
+    return _user_locks[uid]
+
+
+def _is_allowed(user_id: int | None) -> bool:
+    allowed = telegram_allowed_ids()
+    if not allowed:
+        return True
+    return bool(user_id and user_id in allowed)
+
+
+async def _deny_if_forbidden(message_or_cb: Message | CallbackQuery) -> bool:
+    """True = доступ запрещён (уже ответили пользователю)."""
+    user = message_or_cb.from_user
+    uid = user.id if user else None
+    if _is_allowed(uid):
+        return False
+    logger.warning("[%s] отказ: пользователь не в TELEGRAM_ALLOWED_IDS", _user_tag(message_or_cb))
+    text = "⛔ Доступ ограничен. Обратитесь к администратору бота."
+    try:
+        if isinstance(message_or_cb, CallbackQuery):
+            await message_or_cb.answer(text, show_alert=True)
+        else:
+            await message_or_cb.answer(text)
+    except Exception:  # noqa: BLE001
+        logger.exception("Не удалось отправить отказ в доступе")
+    return True
+
+
+def _client_name_from_state(data: dict) -> str:
+    sufficiency = data.get("sufficiency") or {}
+    if isinstance(sufficiency, dict):
+        return sanitize_client_name(sufficiency.get("client_name"))
+    return sanitize_client_name(data.get("client_name"), fallback=DEFAULT_CLIENT_NAME)
+
+
+def _user_facing_error(prefix: str = "Не удалось выполнить операцию") -> str:
+    return f"{prefix}. Подробности в логе сервера."
 
 
 class Flow(StatesGroup):
@@ -156,6 +207,8 @@ async def notify_error(target: Message | CallbackQuery, text: str) -> None:
 
 
 async def cmd_start(message: Message, state: FSMContext) -> None:
+    if await _deny_if_forbidden(message):
+        return
     logger.info("[%s] /start — новая сессия", _user_tag(message))
     await state.clear()
     await state.set_state(Flow.waiting_transcription)
@@ -169,14 +222,16 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
 
 
 async def cmd_help(message: Message) -> None:
+    if await _deny_if_forbidden(message):
+        return
     logger.info("[%s] /help", _user_tag(message))
     await message.answer(
         "/start — начать заново\n"
         "/help — справка\n\n"
         "Варианты КП:\n"
         "• Базовый — газобетон\n"
-        "• Средний (оптимальный) — клееный брус\n"
-        "• Средний + — газобетон усиленный\n\n"
+        "• Средний + — газобетон усиленный\n"
+        "• Средний (оптимальный) — клееный брус\n\n"
         "К КП можно приложить АР (проект дома) и ИР (инженерка).",
     )
 
@@ -222,6 +277,9 @@ async def _read_txt_document(message: Message, bot: Bot) -> str | None:
 
 
 async def handle_transcription(message: Message, state: FSMContext, bot: Bot) -> None:
+    if await _deny_if_forbidden(message):
+        return
+
     text: str | None = None
     if message.document:
         text = await _read_txt_document(message, bot)
@@ -238,17 +296,23 @@ async def handle_transcription(message: Message, state: FSMContext, bot: Bot) ->
     logger.info("[%s] этап: проверка достаточности данных (LLM)", _user_tag(message))
     try:
         result = await asyncio.to_thread(check_transcription_sufficiency, text)
-    except Exception as exc:  # noqa: BLE001
+    except Exception:  # noqa: BLE001
         logger.exception("[%s] ошибка анализа достаточности", _user_tag(message))
-        await wait.edit_text(f"Ошибка анализа: {exc}")
+        await wait.edit_text(_user_facing_error("Ошибка анализа транскрибации"))
         return
 
-    await state.update_data(transcription=text, sufficiency=result)
+    client_name = sanitize_client_name(result.get("client_name"))
+    await state.update_data(
+        transcription=text,
+        sufficiency=result,
+        client_name=client_name,
+    )
     logger.info(
-        "[%s] результат проверки: can_form_kp=%s score=%s",
+        "[%s] результат проверки: can_form_kp=%s score=%s client=%s",
         _user_tag(message),
         result.get("can_form_kp"),
         result.get("score"),
+        client_name,
     )
     await wait.edit_text(format_sufficiency_message(result), parse_mode="HTML")
 
@@ -260,12 +324,15 @@ async def handle_transcription(message: Message, state: FSMContext, bot: Bot) ->
     await state.set_state(Flow.choose_variant)
     logger.info("[%s] этап: выбор варианта КП", _user_tag(message))
     await message.answer(
-        "Выберите вариант КП:",
+        f"Заказчик: <b>{client_name}</b>\nВыберите вариант КП:",
+        parse_mode="HTML",
         reply_markup=kb_variants(),
     )
 
 
 async def on_variant(callback: CallbackQuery, state: FSMContext) -> None:
+    if await _deny_if_forbidden(callback):
+        return
     key = (callback.data or "").split(":", 1)[-1]
     if key not in BOT_VARIANTS:
         logger.warning("[%s] неизвестный вариант КП: %s", _user_tag(callback), key)
@@ -285,6 +352,8 @@ async def on_variant(callback: CallbackQuery, state: FSMContext) -> None:
 
 
 async def on_ar(callback: CallbackQuery, state: FSMContext) -> None:
+    if await _deny_if_forbidden(callback):
+        return
     with_ar = (callback.data or "").endswith(":yes")
     await state.update_data(with_ar=with_ar)
     await state.set_state(Flow.choose_ir)
@@ -300,21 +369,48 @@ async def on_ar(callback: CallbackQuery, state: FSMContext) -> None:
 
 
 async def on_ir(callback: CallbackQuery, state: FSMContext) -> None:
+    if await _deny_if_forbidden(callback):
+        return
     with_ir = (callback.data or "").endswith(":yes")
     await state.update_data(with_engineering=with_ir)
     data = await state.get_data()
-    variant_key = data["variant_key"]
+    variant_key = data.get("variant_key")
+    if not variant_key or variant_key not in BOT_VARIANTS:
+        logger.warning("[%s] нет variant_key в FSM — сброс", _user_tag(callback))
+        await callback.answer("Сессия устарела", show_alert=True)
+        await state.clear()
+        await state.set_state(Flow.waiting_transcription)
+        await notify_error(callback, "Сессия устарела. Пришлите транскрибацию заново")
+        return
+
+    transcription = data.get("transcription")
+    if not transcription:
+        await callback.answer("Нет транскрибации", show_alert=True)
+        await notify_error(callback, "Нет транскрибации в сессии")
+        await state.set_state(Flow.waiting_transcription)
+        return
+
     meta = BOT_VARIANTS[variant_key]
+    client_name = _client_name_from_state(data)
+    user_id = callback.from_user.id if callback.from_user else None
+    lock = _lock_for(user_id)
+
+    if lock.locked():
+        await callback.answer("Уже выполняется сборка, подождите…", show_alert=True)
+        return
+
     logger.info(
-        "[%s] этап: сборка пакета variant=%s ar=%s ir=%s",
+        "[%s] этап: сборка пакета variant=%s ar=%s ir=%s client=%s",
         _user_tag(callback),
         variant_key,
         data.get("with_ar"),
         with_ir,
+        client_name,
     )
 
     await callback.message.edit_text(  # type: ignore[union-attr]
         "Собираю пакет документов…\n"
+        f"• Заказчик: {client_name}\n"
         f"• КП: {meta['title']}\n"
         f"• АР: {'да' if data.get('with_ar') else 'нет'}\n"
         f"• ИР: {'да' if with_ir else 'нет'}\n\n"
@@ -323,24 +419,29 @@ async def on_ir(callback: CallbackQuery, state: FSMContext) -> None:
     )
     await callback.answer()
 
-    try:
-        package = await asyncio.to_thread(
-            build_manager_package,
-            data["transcription"],
-            variant_key,
-            with_ar=bool(data.get("with_ar")),
-            with_engineering=with_ir,
-            include_fz=False,
-        )
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("[%s] ошибка сборки пакета", _user_tag(callback))
-        await notify_error(callback, f"Ошибка формирования пакета: {exc}")
-        await state.set_state(Flow.waiting_transcription)
-        return
+    async with lock:
+        try:
+            package = await asyncio.to_thread(
+                build_manager_package,
+                transcription,
+                variant_key,
+                with_ar=bool(data.get("with_ar")),
+                with_engineering=with_ir,
+                include_fz=False,
+                client_name=client_name,
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("[%s] ошибка сборки пакета", _user_tag(callback))
+            await notify_error(callback, _user_facing_error("Ошибка формирования пакета"))
+            await state.set_state(Flow.waiting_transcription)
+            return
 
     await state.update_data(
         package_files=[str(p) for p in package["files"]],
         kp_path=str(package["kp"]),
+        ar_path=str(package["ar"]) if package.get("ar") else None,
+        engineering_path=str(package["engineering"]) if package.get("engineering") else None,
+        client_name=package.get("client_name") or client_name,
     )
     await state.set_state(Flow.ready_actions)
     logger.info(
@@ -351,7 +452,8 @@ async def on_ir(callback: CallbackQuery, state: FSMContext) -> None:
 
     file_list = "\n".join(f"• {Path(p).name}" for p in package["files"])
     await callback.message.answer(  # type: ignore[union-attr]
-        f"✅ Пакет готов: <b>{package['variant_title']}</b>\n\n"
+        f"✅ Пакет готов: <b>{package['variant_title']}</b>\n"
+        f"Заказчик: <b>{package.get('client_name') or client_name}</b>\n\n"
         f"{file_list}\n\n"
         "Что сделать дальше?",
         parse_mode="HTML",
@@ -375,10 +477,14 @@ async def _send_package_files(message: Message, files: list[str]) -> None:
 
 
 async def on_action(callback: CallbackQuery, state: FSMContext) -> None:
+    if await _deny_if_forbidden(callback):
+        return
     action = (callback.data or "").split(":", 1)[-1]
     data = await state.get_data()
     files = data.get("package_files") or []
     logger.info("[%s] действие: %s", _user_tag(callback), action)
+    user_id = callback.from_user.id if callback.from_user else None
+    lock = _lock_for(user_id)
 
     if action == "download":
         await callback.answer("Отправляю файлы…")
@@ -387,9 +493,9 @@ async def on_action(callback: CallbackQuery, state: FSMContext) -> None:
             return
         try:
             await _send_package_files(callback.message, files)  # type: ignore[arg-type]
-        except Exception as exc:  # noqa: BLE001
+        except Exception:  # noqa: BLE001
             logger.exception("[%s] ошибка отправки файлов", _user_tag(callback))
-            await notify_error(callback, f"Не удалось отправить файлы: {exc}")
+            await notify_error(callback, _user_facing_error("Не удалось отправить файлы"))
             return
         await callback.message.answer(  # type: ignore[union-attr]
             "Файлы отправлены. Можно скачать их в чат.",
@@ -406,26 +512,40 @@ async def on_action(callback: CallbackQuery, state: FSMContext) -> None:
             )
             return
 
-        logger.info("[%s] этап: сборка единого PDF (3 КП + смета)", _user_tag(callback))
+        if lock.locked():
+            await callback.message.answer(  # type: ignore[union-attr]
+                "Уже выполняется сборка документов. Подождите…"
+            )
+            return
+
+        client_name = _client_name_from_state(data)
+        logger.info(
+            "[%s] этап: сборка единого PDF (3 КП + смета), client=%s",
+            _user_tag(callback),
+            client_name,
+        )
         wait = await callback.message.answer(  # type: ignore[union-attr]
             "Собираю единый PDF: сводная стоимость + все 3 КП"
             + (" + АР" if data.get("with_ar") else "")
             + (" + ИР" if data.get("with_engineering") else "")
             + "…\nЭто может занять несколько минут."
         )
-        try:
-            combined = await asyncio.to_thread(
-                build_combined_document,
-                transcription,
-                with_ar=bool(data.get("with_ar")),
-                with_engineering=bool(data.get("with_engineering")),
-                include_fz=False,
-                client_name="Иван",
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("[%s] ошибка combine", _user_tag(callback))
-            await wait.edit_text(f"Ошибка сборки документа: {exc}")
-            return
+        async with lock:
+            try:
+                combined = await asyncio.to_thread(
+                    build_combined_document,
+                    transcription,
+                    with_ar=bool(data.get("with_ar")),
+                    with_engineering=bool(data.get("with_engineering")),
+                    include_fz=False,
+                    client_name=client_name,
+                    existing_ar=data.get("ar_path"),
+                    existing_engineering=data.get("engineering_path"),
+                )
+            except Exception:  # noqa: BLE001
+                logger.exception("[%s] ошибка combine", _user_tag(callback))
+                await wait.edit_text(_user_facing_error("Ошибка сборки документа"))
+                return
 
         combined_pdf = Path(combined["combined_pdf"])
         await state.update_data(combined_pdf=str(combined_pdf))
@@ -436,11 +556,18 @@ async def on_action(callback: CallbackQuery, state: FSMContext) -> None:
             combined_pdf.stat().st_size,
         )
 
-        lines = ["<b>Полная стоимость проекта (ориентир):</b>"]
+        lines = [
+            f"<b>Заказчик:</b> {client_name}",
+            "<b>Стоимость по выбранным опциям:</b>",
+        ]
         for row in combined["summary"]["rows"]:
+            parts = [f"контур {row['contour_fmt']} ₽"]
+            if data.get("with_ar"):
+                parts.append(f"АР {row['ar_fmt']} ₽")
+            if data.get("with_engineering"):
+                parts.append(f"ИР {row['ir_fmt']} ₽")
             lines.append(
-                f"• {row['title']}: контур {row['contour_fmt']} ₽ + АР {row['ar_fmt']} ₽ "
-                f"+ ИР {row['ir_fmt']} ₽ = <b>{row['total_fmt']} ₽</b>"
+                f"• {row['title']}: {' + '.join(parts)} = <b>{row['total_fmt']} ₽</b>"
             )
         await wait.edit_text("\n".join(lines), parse_mode="HTML")
 
@@ -488,9 +615,9 @@ async def on_action(callback: CallbackQuery, state: FSMContext) -> None:
         logger.info("[%s] этап: ZIP финального КП", _user_tag(callback))
         try:
             zip_path = await asyncio.to_thread(make_final_zip, Path(combined_path))
-        except Exception as exc:  # noqa: BLE001
+        except Exception:  # noqa: BLE001
             logger.exception("[%s] ошибка ZIP", _user_tag(callback))
-            await notify_error(callback, f"Ошибка ZIP: {exc}")
+            await notify_error(callback, _user_facing_error("Ошибка ZIP"))
             return
 
         await state.update_data(combined_zip=str(zip_path))
@@ -560,7 +687,22 @@ async def on_action(callback: CallbackQuery, state: FSMContext) -> None:
         )
         return
 
-    await callback.answer()
+    await callback.answer("Неизвестное действие", show_alert=True)
+
+
+async def on_stale_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    """Устаревшие кнопки после /start или рестарта процесса."""
+    if await _deny_if_forbidden(callback):
+        return
+    logger.info("[%s] устаревший callback: %s", _user_tag(callback), callback.data)
+    await callback.answer("Сессия устарела — нажмите /start", show_alert=True)
+    current = await state.get_state()
+    if current is None:
+        await state.set_state(Flow.waiting_transcription)
+    if callback.message:
+        await callback.message.answer(
+            "Эта кнопка больше не действует. Нажмите /start и пришлите транскрибацию."
+        )
 
 
 async def on_global_error(event: ErrorEvent) -> None:
@@ -596,6 +738,7 @@ def build_dispatcher() -> Dispatcher:
     dp.callback_query.register(on_ar, Flow.choose_ar, F.data.startswith("ar:"))
     dp.callback_query.register(on_ir, Flow.choose_ir, F.data.startswith("ir:"))
     dp.callback_query.register(on_action, Flow.ready_actions, F.data.startswith("act:"))
+    dp.callback_query.register(on_stale_callback)
     return dp
 
 
@@ -605,6 +748,15 @@ async def main() -> None:
         logger.error("TELEGRAM_BOT_TOKEN не задан в .env")
         raise SystemExit(
             "Укажите TELEGRAM_BOT_TOKEN в .env (токен от @BotFather)"
+        )
+
+    allowed = telegram_allowed_ids()
+    if allowed:
+        logger.info("Allowlist Telegram: %s id(s)", len(allowed))
+    else:
+        logger.warning(
+            "TELEGRAM_ALLOWED_IDS не задан — бот доступен любому пользователю. "
+            "Рекомендуется указать id через запятую в .env"
         )
 
     bot = Bot(token=token)

@@ -14,19 +14,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+from utils.config import REPORT_TYPE_ALIASES, resolve_report_type
+from utils.logging_setup import get_logger, setup_logging
 from utils.report_service import create_report
 
-REPORT_TYPES = {
-    "1": "client",
-    "2": "design",
-    "3": "ar",
-    "4": "engineering",
-    "client": "client",
-    "design": "design",
-    "ar": "ar",
-    "engineering": "engineering",
-    "ir": "engineering",
-}
+setup_logging()
+logger = get_logger("cli")
 
 
 def open_report(path: Path) -> None:
@@ -48,7 +41,7 @@ def read_dialog(source: str | None) -> str:
         path = Path(source)
         if not path.exists():
             raise FileNotFoundError(f"Файл не найден: {path}")
-        text = path.read_text(encoding="utf-8").strip()
+        text = path.read_text(encoding="utf-8", errors="replace").strip()
         if not text:
             raise ValueError(f"Файл пуст: {path}")
         return text
@@ -73,10 +66,7 @@ def read_dialog(source: str | None) -> str:
 def choose_report_type(explicit: str | None) -> str:
     """Выбор типа отчёта: из аргумента или интерактивно."""
     if explicit:
-        key = explicit.strip().lower()
-        if key not in REPORT_TYPES:
-            raise ValueError("Тип: client | design | ar | engineering (1–4)")
-        return REPORT_TYPES[key]
+        return resolve_report_type(explicit)
 
     print("Какой документ сгенерировать?")
     print("  1) Клиентский отчёт")
@@ -84,9 +74,7 @@ def choose_report_type(explicit: str | None) -> str:
     print("  3) АР — архитектурное решение дома")
     print("  4) ИР — проект инженерных решений (+ смета)")
     choice = input("Введите 1–4: ").strip().lower()
-    if choice not in REPORT_TYPES:
-        raise ValueError("Нужно выбрать 1, 2, 3 или 4")
-    return REPORT_TYPES[choice]
+    return resolve_report_type(choice)
 
 
 def _ask_yes(prompt: str, default: bool = False) -> bool:
@@ -112,7 +100,7 @@ def run_cli(argv: list[str] | None = None) -> int:
         "--type",
         "-t",
         dest="report_type",
-        choices=["client", "design", "ar", "engineering", "ir", "1", "2", "3", "4"],
+        choices=sorted(REPORT_TYPE_ALIASES.keys()),
         help="Тип документа",
     )
     parser.add_argument("--serve", action="store_true", help="Запустить Flask API")
@@ -150,6 +138,7 @@ def run_cli(argv: list[str] | None = None) -> int:
         from flask_app import create_app
 
         app = create_app()
+        logger.info("Flask API: http://%s:%s", args.host, args.port)
         print(f"Flask API: http://{args.host}:{args.port}")
         app.run(host=args.host, port=args.port, debug=False)
         return 0
@@ -162,11 +151,24 @@ def run_cli(argv: list[str] | None = None) -> int:
             "Приложить проект инженерных решений (ИР) к КП?"
         )
         dialog_text = None
-        if include_eng and args.file:
-            try:
-                dialog_text = read_dialog(args.file)
-            except Exception:  # noqa: BLE001
-                dialog_text = None
+        if include_eng:
+            if not args.file:
+                print(
+                    "Для ИР с AI-брифом укажите файл транскрибации "
+                    "(иначе будет шаблон).",
+                    file=sys.stderr,
+                )
+            else:
+                try:
+                    dialog_text = read_dialog(args.file)
+                except Exception as exc:  # noqa: BLE001
+                    logger.exception("Не удалось прочитать диалог для ИР")
+                    print(
+                        f"Ошибка чтения файла для ИР: {exc}\n"
+                        "Продолжаю со шаблонным брифом.",
+                        file=sys.stderr,
+                    )
+                    dialog_text = None
 
         try:
             paths = generate_all_kp(
@@ -175,6 +177,7 @@ def run_cli(argv: list[str] | None = None) -> int:
                 dialog_text=dialog_text,
             )
         except Exception as exc:  # noqa: BLE001
+            logger.exception("Ошибка генерации КП")
             print(f"Ошибка: {exc}", file=sys.stderr)
             return 1
 
@@ -209,6 +212,7 @@ def run_cli(argv: list[str] | None = None) -> int:
         dialog_text = read_dialog(args.file)
         pdf_path = create_report(dialog_text, report_type)
     except Exception as exc:  # noqa: BLE001
+        logger.exception("Ошибка генерации отчёта")
         print(f"Ошибка: {exc}", file=sys.stderr)
         return 1
 

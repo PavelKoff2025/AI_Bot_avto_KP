@@ -1,0 +1,24 @@
+# Locked versions from a working .venv (2026-08-04, Python 3.11).
+# Use for reproducible installs:
+#   pip install -r requirements.lock.txt
+#
+# Для обычной разработки достаточно: pip install -r requirements.txt
+
+aiogram==3.30.0
+aiohttp==3.14.3
+Flask==3.1.3
+Jinja2==3.1.6
+openai==2.52.0
+pypdf==6.14.2
+python-dotenv==1.2.2
+weasyprint==69.0
+
+# Frequent WeasyPrint / image transitive pins (useful for CI reproducibility)
+Pillow==12.3.0
+cffi==2.1.0
+cssselect2==0.9.0
+fonttools==4.63.0
+pydyf==0.12.1
+tinycss2==1.5.1
+pydantic==2.13.4
+magic-filter==1.0.12

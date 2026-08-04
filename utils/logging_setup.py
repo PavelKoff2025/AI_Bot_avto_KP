@@ -53,6 +53,11 @@ def setup_logging(level: int = logging.INFO) -> logging.Logger:
         "dom_master.combined",
         "dom_master.sufficiency",
         "dom_master.report",
+        "dom_master.kp",
+        "dom_master.engineering",
+        "dom_master.flask",
+        "dom_master.cli",
+        "dom_master.image",
     ):
         child = logging.getLogger(name)
         child.setLevel(level)

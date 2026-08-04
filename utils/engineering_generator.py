@@ -9,7 +9,12 @@ from pathlib import Path
 from typing import Any
 
 from utils.ai_processor import process_engineering_with_ai
+from utils.config import DEFAULT_CLIENT_NAME, sanitize_client_name
+from utils.logging_setup import get_logger
+from utils.money import format_money
 from utils.pdf_generator import REPORTS_DIR, generate_pdf_report
+
+logger = get_logger("engineering")
 
 ENGINEERING_DIR = REPORTS_DIR / "engineering"
 
@@ -67,20 +72,18 @@ ENGINEERING_PACKAGE = {
 }
 
 
-def _fmt(amount: int) -> str:
-    return f"{amount:,}".replace(",", " ")
-
-
 def build_engineering_context(
     dialog_text: str | None = None,
     *,
     use_ai: bool = True,
+    client_name: str = DEFAULT_CLIENT_NAME,
 ) -> dict[str, Any]:
     """Собирает данные для PDF проекта инженерных решений."""
     today = datetime.now().strftime("%d.%m.%Y")
+    safe_name = sanitize_client_name(client_name)
 
     brief: dict[str, str] = {
-        "client_name": "Иван",
+        "client_name": safe_name,
         "project_name": "ИЖД, Московская область (Дмитровское шоссе)",
         "area": "120–140 м² (расчёт на 130 м²)",
         "plot_notes": (
@@ -124,9 +127,16 @@ def build_engineering_context(
     if dialog_text and use_ai:
         try:
             brief.update(process_engineering_with_ai(dialog_text))
-        except Exception as exc:  # noqa: BLE001
+            # AI может вернуть имя — нормализуем; если пусто — оставляем safe_name
+            brief["client_name"] = sanitize_client_name(
+                brief.get("client_name"),
+                fallback=safe_name,
+            )
+        except Exception:
+            logger.exception("AI-бриф ИР недоступен — используем шаблон")
             brief["assumptions"] = (
-                f"{brief['assumptions']} (AI-бриф недоступен: {exc}; использован шаблон.)"
+                f"{brief['assumptions']} "
+                "(AI-бриф временно недоступен; использован шаблонный текст.)"
             )
 
     items = []
@@ -134,7 +144,7 @@ def build_engineering_context(
     for raw in BASIC_ESTIMATE_ITEMS:
         row = deepcopy(raw)
         total += int(row["price"])
-        row["price_fmt"] = _fmt(row["price"])
+        row["price_fmt"] = format_money(row["price"])
         items.append(row)
 
     return {
@@ -146,10 +156,10 @@ def build_engineering_context(
         "accent_soft": "#e6f5ef",
         "items": items,
         "total": total,
-        "total_fmt": f"{_fmt(total)} ₽",
+        "total_fmt": f"{format_money(total)} ₽",
         "total_note": (
-            f"Предварительная смета базового пакета ИР на ~130 м²: {_fmt(total)} ₽ "
-            f"(~{_fmt(round(total / 130))} ₽/м²). Без септика/ЛОС и газгольдера."
+            f"Предварительная смета базового пакета ИР на ~130 м²: {format_money(total)} ₽ "
+            f"(~{format_money(round(total / 130))} ₽/м²). Без септика/ЛОС и газгольдера."
         ),
         "included": [
             "Проектирование базового комплекта ИР",
@@ -180,13 +190,18 @@ def generate_engineering_project(
     *,
     use_ai: bool = True,
     output_path: str | Path | None = None,
+    client_name: str = DEFAULT_CLIENT_NAME,
 ) -> Path:
     """Генерирует PDF (+HTML/JSON) проекта инженерных решений."""
     ENGINEERING_DIR.mkdir(parents=True, exist_ok=True)
-    data = build_engineering_context(dialog_text, use_ai=use_ai)
+    data = build_engineering_context(
+        dialog_text,
+        use_ai=use_ai,
+        client_name=client_name,
+    )
 
     if output_path is None:
-        stamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
+        stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         output_path = ENGINEERING_DIR / f"IR_engineering_{stamp}.pdf"
     else:
         output_path = Path(output_path)

@@ -5,13 +5,23 @@ from __future__ import annotations
 import base64
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from .ai_processor import _get_client
+from utils.ai_processor import get_openai_client
+from utils.logging_setup import get_logger
 
 load_dotenv()
+logger = get_logger("image")
+
+# Хосты, которым доверяем при скачивании изображений по URL от API
+_ALLOWED_IMAGE_HOST_SUFFIXES = (
+    "openai.com",
+    "oaiusercontent.com",
+    "blob.core.windows.net",
+)
 
 
 def generate_design_image(
@@ -32,7 +42,7 @@ def generate_design_image(
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    client = _get_client()
+    client = get_openai_client()
     model = os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1")
     image_size = size or os.getenv("OPENAI_IMAGE_SIZE", "1024x1024")
 
@@ -41,6 +51,9 @@ def generate_design_image(
     except Exception:
         if model == "dall-e-3":
             raise
+        logger.exception(
+            "Модель изображений %s недоступна — fallback на dall-e-3", model
+        )
         image_bytes = _request_image(
             client,
             model="dall-e-3",
@@ -83,8 +96,19 @@ def _request_image(client: OpenAI, *, model: str, prompt: str, size: str) -> byt
     raise ValueError("OpenAI не вернул изображение (ни b64_json, ни url)")
 
 
+def _is_allowed_image_url(url: str) -> bool:
+    parsed = urlparse(url)
+    if parsed.scheme != "https":
+        return False
+    host = (parsed.hostname or "").lower()
+    return any(host == s or host.endswith("." + s) for s in _ALLOWED_IMAGE_HOST_SUFFIXES)
+
+
 def _download_bytes(url: str) -> bytes:
     import urllib.request
+
+    if not _is_allowed_image_url(url):
+        raise ValueError(f"Отказ в скачивании изображения: недоверенный URL host")
 
     with urllib.request.urlopen(url, timeout=120) as response:  # noqa: S310
         return response.read()

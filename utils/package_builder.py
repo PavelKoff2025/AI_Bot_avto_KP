@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from utils.config import DEFAULT_CLIENT_NAME, sanitize_client_name
 from utils.kp_generator import BOT_VARIANTS, KP_DIR, generate_single_kp
 from utils.logging_setup import get_logger
 from utils.report_service import create_ar_report
@@ -20,7 +21,15 @@ def build_manager_package(
     with_ar: bool = False,
     with_engineering: bool = False,
     include_fz: bool = False,
+    client_name: str = DEFAULT_CLIENT_NAME,
 ) -> dict[str, Any]:
+    """
+    Один вариант КП для менеджера.
+
+    with_engineering=True добавляет пакет ИР в цену КП и PDF-приложение.
+    (В сводном документе ИР в цену страниц КП не входит — только в сводную смету
+    и опциональное приложение; см. build_combined_document.)
+    """
     if variant_key not in BOT_VARIANTS:
         raise ValueError(f"Неизвестный вариант: {variant_key}")
 
@@ -28,12 +37,14 @@ def build_manager_package(
     out_dir = KP_DIR / f"bot_{stamp}"
     out_dir.mkdir(parents=True, exist_ok=True)
     meta = BOT_VARIANTS[variant_key]
+    safe_name = sanitize_client_name(client_name)
     logger.info(
-        "Старт пакета: variant=%s ar=%s ir=%s fz=%s → %s",
+        "Старт пакета: variant=%s ar=%s ir=%s fz=%s client=%s → %s",
         variant_key,
         with_ar,
         with_engineering,
         include_fz,
+        safe_name,
         out_dir.name,
     )
 
@@ -50,6 +61,7 @@ def build_manager_package(
             include_engineering=with_engineering,
             dialog_text=dialog_text,
             output_dir=out_dir,
+            client_name=safe_name,
         )
         files.extend(kp_files)
         kp_path = kp_files[0]
@@ -83,6 +95,7 @@ def build_manager_package(
         "variant_key": variant_key,
         "variant_title": meta["title"],
         "variant_description": meta["description"],
+        "client_name": safe_name,
         "files": files,
         "kp": kp_path,
         "ar": ar_path,

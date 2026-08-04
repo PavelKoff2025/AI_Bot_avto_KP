@@ -60,13 +60,18 @@ DESIGN_REPORT_PROMPT = """
 """.strip()
 
 
-def _get_client() -> OpenAI:
+def get_openai_client() -> OpenAI:
+    """Публичный доступ к OpenAI-клиенту (ключ из OPENAI_API_KEY)."""
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key or api_key == "your_openai_api_key_here":
         raise ValueError(
             "Не задан OPENAI_API_KEY. Укажите ключ в файле .env"
         )
     return OpenAI(api_key=api_key)
+
+
+# Обратная совместимость для внутренних импортов
+_get_client = get_openai_client
 
 
 def _extract_json(text: str) -> dict[str, Any]:
@@ -77,13 +82,21 @@ def _extract_json(text: str) -> dict[str, Any]:
     except json.JSONDecodeError:
         pass
 
-    fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+    # Жадный захват внутри fence — иначе вложенные объекты обрезаются
+    fenced = re.search(r"```(?:json)?\s*(\{.*\})\s*```", text, re.DOTALL)
     if fenced:
-        return json.loads(fenced.group(1))
+        try:
+            return json.loads(fenced.group(1))
+        except json.JSONDecodeError:
+            pass
 
-    braced = re.search(r"\{.*\}", text, re.DOTALL)
-    if braced:
-        return json.loads(braced.group(0))
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end > start:
+        try:
+            return json.loads(text[start : end + 1])
+        except json.JSONDecodeError:
+            pass
 
     raise ValueError(f"Не удалось распарсить JSON из ответа модели:\n{text}")
 
@@ -98,8 +111,9 @@ def _normalize_fields(data: dict[str, Any], required_keys: tuple[str, ...]) -> d
     return result
 
 
-def _chat_json(system_prompt: str, user_prompt: str) -> dict[str, Any]:
-    client = _get_client()
+def chat_json(system_prompt: str, user_prompt: str) -> dict[str, Any]:
+    """Chat Completions с response_format=json_object → dict."""
+    client = get_openai_client()
     model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
     response = client.chat.completions.create(
         model=model,
@@ -112,6 +126,9 @@ def _chat_json(system_prompt: str, user_prompt: str) -> dict[str, Any]:
     )
     content = response.choices[0].message.content or ""
     return _extract_json(content)
+
+
+_chat_json = chat_json
 
 
 def process_dialog_with_ai(text: str) -> dict[str, str]:

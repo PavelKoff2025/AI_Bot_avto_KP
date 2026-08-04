@@ -8,13 +8,17 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from utils.config import DEFAULT_CLIENT_NAME, sanitize_client_name
 from utils.engineering_generator import (
     ENGINEERING_PACKAGE,
     ENGINEERING_PACKAGE_TOTAL,
     generate_engineering_project,
 )
+from utils.logging_setup import get_logger
+from utils.money import format_money
 from utils.pdf_generator import REPORTS_DIR, generate_pdf_report
 
+logger = get_logger("kp")
 KP_DIR = REPORTS_DIR / "kp"
 
 # Варианты для ТГ-бота / менеджера ОП
@@ -74,7 +78,8 @@ FZ_PACKAGES = {
 
 
 def _fmt(amount: int) -> str:
-    return f"{amount:,}".replace(",", " ")
+    """Совместимость; предпочтительно format_money."""
+    return format_money(amount)
 
 
 def _with_prices(items: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
@@ -89,12 +94,12 @@ def _with_prices(items: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int
     return result, total
 
 
-def _base_context() -> dict[str, Any]:
+def _base_context(*, client_name: str = DEFAULT_CLIENT_NAME) -> dict[str, Any]:
     today = datetime.now()
     return {
         "date": today.strftime("%d.%m.%Y"),
         "valid_until": (today + timedelta(days=14)).strftime("%d.%m.%Y"),
-        "client_name": "Иван",
+        "client_name": sanitize_client_name(client_name),
         "object_desc": (
             "Индивидуальный жилой дом, 1 этаж, современный стиль, "
             "ориентир 120–140 м² (расчёт выполнен на 130 м²)"
@@ -195,9 +200,11 @@ def _badge(include_fz: bool, include_engineering: bool) -> str:
 def build_variants(
     include_fz: bool = False,
     include_engineering: bool = False,
+    *,
+    client_name: str = DEFAULT_CLIENT_NAME,
 ) -> list[dict[str, Any]]:
     """Три варианта КП с опциональными ФЗ и/или инженеркой (ИР)."""
-    base = _base_context()
+    base = _base_context(client_name=client_name)
 
     raw1 = [
         {"name": "Фундамент заливной ленточный", "detail": "Лента 400 мм, глубина 1,5 м, бетон B25, гидроизоляция", "price": 780_000},
@@ -398,6 +405,7 @@ def generate_single_kp(
     include_engineering: bool = False,
     dialog_text: str | None = None,
     output_dir: Path | None = None,
+    client_name: str = DEFAULT_CLIENT_NAME,
 ) -> list[Path]:
     """
     Формирует один выбранный вариант КП (+ опционально приложение ИР).
@@ -410,6 +418,7 @@ def generate_single_kp(
 
     out_dir = Path(output_dir) if output_dir else KP_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
+    safe_name = sanitize_client_name(client_name)
 
     engineering_attachment: Path | None = None
     if include_engineering:
@@ -417,12 +426,14 @@ def generate_single_kp(
             dialog_text,
             use_ai=bool(dialog_text),
             output_path=out_dir / "attachment_IR_engineering.pdf",
+            client_name=safe_name,
         )
 
     idx = BOT_VARIANTS[variant_key]["index"]
     variants = build_variants(
         include_fz=include_fz,
         include_engineering=include_engineering,
+        client_name=safe_name,
     )
     variant = variants[idx]
     if engineering_attachment:
@@ -448,29 +459,36 @@ def generate_all_kp(
     include_fz: bool = False,
     include_engineering: bool = False,
     dialog_text: str | None = None,
+    *,
+    client_name: str = DEFAULT_CLIENT_NAME,
 ) -> list[Path]:
-    """Создаёт PDF + HTML + JSON для всех вариантов КП."""
-    KP_DIR.mkdir(parents=True, exist_ok=True)
+    """Создаёт PDF + HTML + JSON для всех вариантов КП в уникальной подпапке."""
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_dir = KP_DIR / f"batch_{stamp}"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    safe_name = sanitize_client_name(client_name)
 
     engineering_attachment: Path | None = None
     if include_engineering:
-        print("Формирование приложения: проект инженерных решений (ИР)...")
+        logger.info("Формирование приложения: проект инженерных решений (ИР)…")
         eng_path = generate_engineering_project(
             dialog_text,
             use_ai=bool(dialog_text),
-            output_path=KP_DIR / "attachment_IR_engineering.pdf",
+            output_path=out_dir / "attachment_IR_engineering.pdf",
+            client_name=safe_name,
         )
         engineering_attachment = eng_path
-        print(f"Приложение ИР: {eng_path}")
+        logger.info("Приложение ИР: %s", eng_path)
 
     paths: list[Path] = []
     for variant in build_variants(
         include_fz=include_fz,
         include_engineering=include_engineering,
+        client_name=safe_name,
     ):
         if engineering_attachment:
             variant["engineering_attachment"] = engineering_attachment.name
-        out = KP_DIR / f"{variant['filename']}.pdf"
+        out = out_dir / f"{variant['filename']}.pdf"
         path = generate_pdf_report(
             variant,
             output_path=out,

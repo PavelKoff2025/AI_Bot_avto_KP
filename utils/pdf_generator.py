@@ -87,7 +87,7 @@ def generate_pdf_report(
         template_name = REPORT_TEMPLATES.get(report_type, REPORT_TEMPLATES["client"])
 
     if output_path is None:
-        stamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
+        stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         prefix = {
             "design": "design",
             "ar": "ar",
