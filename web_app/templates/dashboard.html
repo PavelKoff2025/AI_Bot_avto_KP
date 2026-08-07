@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Дашборд — Дом-Мастер</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .table-wrap { overflow-x: auto; margin-top: 12px; }
+        table { width: 100%; border-collapse: collapse; min-width: 1400px; font-size: 13px; }
+        th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: left; vertical-align: top; }
+        th { background: #f2f2f2; white-space: nowrap; }
+        td { max-width: 160px; word-break: break-word; }
+        .status-new { color: blue; font-weight: bold; }
+        .status-sent { color: orange; font-weight: bold; }
+        .status-answered { color: green; font-weight: bold; }
+        .status-lost { color: red; font-weight: bold; }
+        .status-won { color: darkgreen; font-weight: bold; }
+        .status-stalled { color: purple; font-weight: bold; }
+        .btn { display: inline-block; padding: 10px 20px; background: #007bff; color: #fff; text-decoration: none; border-radius: 4px; }
+        .btn:hover { background: #0056b3; }
+        .logout { float: right; color: #999; margin-left: 15px; }
+        .stats { display: flex; gap: 20px; margin: 20px 0; flex-wrap: wrap; }
+        .stat-card { padding: 15px 25px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #007bff; }
+        .stat-number { font-size: 24px; font-weight: bold; }
+        .stat-label { color: #666; }
+        .stat-card.new { border-left-color: #007bff; }
+        .stat-card.sent { border-left-color: #ffc107; }
+        .stat-card.answered { border-left-color: #28a745; }
+        .stat-card.won { border-left-color: #28a745; }
+        .stat-card.lost { border-left-color: #dc3545; }
+        .stat-card.stalled { border-left-color: #6f42c1; }
+        .missing { color: #dc3545; font-weight: 600; white-space: nowrap; }
+        .etalon-score {
+            display: inline-block;
+            min-width: 3.2em;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-weight: 700;
+            text-align: center;
+        }
+        .etalon-high { background: #d1e7dd; color: #0f5132; }
+        .etalon-mid { background: #fff3cd; color: #664d03; }
+        .etalon-low { background: #f8d7da; color: #842029; }
+    </style>
+</head>
+<body>
+    {% macro cell(val) -%}
+        {%- set text = (val|string)|trim if val is not none else '' -%}
+        {%- if text and text not in ['—', '-', 'None', 'null'] -%}
+            {{ text }}
+        {%- else -%}
+            <span class="missing">Нужно уточнить</span>
+        {%- endif -%}
+    {%- endmacro %}
+
+    <h1>📊 Дашборд</h1>
+    <a href="{{ url_for('logout') }}" class="logout">Выйти</a>
+    <a href="{{ url_for('deals.list_deals') }}" class="btn">📋 Все сделки</a>
+    <a href="{{ url_for('deals.new_deal') }}" class="btn" style="background: #28a745;">➕ Новая сделка</a>
+    
+    <p style="margin: 15px 0;">Менеджер: {{ session.get('user_name', session.get('username', 'Пользователь')) }}</p>
+    
+    <div class="stats">
+        <div class="stat-card">
+            <div class="stat-number">{{ deals|length }}</div>
+            <div class="stat-label">Всего сделок</div>
+        </div>
+        {% set new_count = deals|selectattr('status', 'equalto', 'new')|list|length %}
+        <div class="stat-card new">
+            <div class="stat-number">{{ new_count }}</div>
+            <div class="stat-label">Новые</div>
+        </div>
+        {% set sent_count = deals|selectattr('status', 'equalto', 'sent')|list|length %}
+        <div class="stat-card sent">
+            <div class="stat-number">{{ sent_count }}</div>
+            <div class="stat-label">Отправлено</div>
+        </div>
+        {% set won_count = deals|selectattr('status', 'equalto', 'won')|list|length %}
+        <div class="stat-card won">
+            <div class="stat-number">{{ won_count }}</div>
+            <div class="stat-label">Выиграно</div>
+        </div>
+        {% set stalled_count = deals|selectattr('status', 'equalto', 'stalled')|list|length %}
+        <div class="stat-card stalled">
+            <div class="stat-number">{{ stalled_count }}</div>
+            <div class="stat-label">Зависло</div>
+        </div>
+    </div>
+    
+    <h3>Последние сделки</h3>
+    <div class="table-wrap">
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Клиент</th>
+                <th>Телефон</th>
+                <th>Email</th>
+                <th>Telegram</th>
+                <th>Участок</th>
+                <th>Бюджет</th>
+                <th>Площадь</th>
+                <th>Материал</th>
+                <th>Сроки</th>
+                <th>Финансирование</th>
+                <th>Эталон</th>
+                <th>Статус</th>
+                <th>Дата</th>
+                <th>Действие</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for deal in deals[:10] %}
+            <tr>
+                <td>{{ deal.id }}</td>
+                <td>{{ cell(deal.client_name) }}</td>
+                <td>{{ cell(deal.client_phone) }}</td>
+                <td>{{ cell(deal.client_email) }}</td>
+                <td>{{ cell(deal.client_telegram) }}</td>
+                <td>{{ cell(deal.plot) }}</td>
+                <td>{{ cell(deal.budget) }}</td>
+                <td>{{ cell(deal.area) }}</td>
+                <td>{{ cell(deal.material) }}</td>
+                <td>{{ cell(deal.timeline) }}</td>
+                <td>{{ cell(deal.funding_source) }}</td>
+                <td>
+                    <span
+                        class="etalon-score etalon-{{ deal.etalon_grade }}"
+                        title="{% if deal.etalon_missing %}Не хватает: {{ deal.etalon_missing|join(', ') }}{% else %}Все поля эталона заполнены{% endif %}"
+                    >{{ deal.etalon_score }}%</span>
+                </td>
+                <td class="status-{{ deal.status }}">{{ deal.status }}</td>
+                <td>{{ deal.created_at[:10] if deal.created_at else '—' }}</td>
+                <td>
+                    <a href="{{ url_for('deals.deal_detail', deal_id=deal.id) }}">Открыть</a>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="15" style="text-align: center; color: #999;">Нет сделок. Создайте первую!</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+</body>
+</html>

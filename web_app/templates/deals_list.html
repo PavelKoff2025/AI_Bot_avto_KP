@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Сделки — Дом-Мастер</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .table-wrap { overflow-x: auto; margin-top: 20px; }
+        table { width: 100%; border-collapse: collapse; min-width: 1400px; font-size: 13px; }
+        th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: left; vertical-align: top; }
+        th { background: #f2f2f2; white-space: nowrap; }
+        td { max-width: 160px; word-break: break-word; }
+        .status-new { color: blue; font-weight: bold; }
+        .status-sent { color: orange; font-weight: bold; }
+        .status-answered { color: green; font-weight: bold; }
+        .status-lost { color: red; font-weight: bold; }
+        .status-won { color: darkgreen; font-weight: bold; }
+        .status-stalled { color: purple; font-weight: bold; }
+        .btn { display: inline-block; padding: 10px 20px; background: #007bff; color: #fff; text-decoration: none; border-radius: 4px; }
+        .btn:hover { background: #0056b3; }
+        .logout { float: right; color: #999; margin-left: 15px; }
+        .flash { padding: 10px; margin: 10px 0; border-radius: 4px; }
+        .flash-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .flash-error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .filter { margin-bottom: 15px; }
+        .filter select { padding: 5px; }
+        .missing { color: #dc3545; font-weight: 600; white-space: nowrap; }
+        .etalon-score {
+            display: inline-block;
+            min-width: 3.2em;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-weight: 700;
+            text-align: center;
+        }
+        .etalon-high { background: #d1e7dd; color: #0f5132; }
+        .etalon-mid { background: #fff3cd; color: #664d03; }
+        .etalon-low { background: #f8d7da; color: #842029; }
+        .hint { color: #888; font-size: 13px; margin-top: 8px; }
+    </style>
+</head>
+<body>
+    {% macro cell(val) -%}
+        {%- set text = (val|string)|trim if val is not none else '' -%}
+        {%- if text and text not in ['—', '-', 'None', 'null'] -%}
+            {{ text }}
+        {%- else -%}
+            <span class="missing">Нужно уточнить</span>
+        {%- endif -%}
+    {%- endmacro %}
+
+    <h1>📋 Сделки</h1>
+    <a href="{{ url_for('logout') }}" class="logout">Выйти</a>
+    <a href="{{ url_for('deals.new_deal') }}" class="btn">➕ Новая сделка</a>
+    <p>Менеджер: {{ session.get('user_name', session.get('username', 'Пользователь')) }}</p>
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="flash flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+    
+    <div class="filter">
+        <form method="GET" action="{{ url_for('deals.list_deals') }}">
+            <select name="status">
+                <option value="">Все статусы</option>
+                <option value="new">Новая</option>
+                <option value="sent">Отправлено</option>
+                <option value="answered">Ответ получен</option>
+                <option value="stalled">Зависла</option>
+                <option value="won">Выиграна</option>
+                <option value="lost">Проиграна</option>
+            </select>
+            <button type="submit">Фильтр</button>
+        </form>
+        <p class="hint">
+            Соответствие эталону:
+            <span class="etalon-score etalon-high">80–100%</span>
+            <span class="etalon-score etalon-mid">50–79%</span>
+            <span class="etalon-score etalon-low">0–49%</span>
+            · обязательные поля: телефон, email, участок, бюджет, площадь, материал, сроки, финансирование (+ telegram)
+        </p>
+    </div>
+    
+    <div class="table-wrap">
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Клиент</th>
+                <th>Телефон</th>
+                <th>Email</th>
+                <th>Telegram</th>
+                <th>Участок</th>
+                <th>Бюджет</th>
+                <th>Площадь</th>
+                <th>Материал</th>
+                <th>Сроки</th>
+                <th>Финансирование</th>
+                <th>Эталон</th>
+                <th>Статус</th>
+                <th>Дата</th>
+                <th>Действие</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for deal in deals %}
+            <tr>
+                <td>{{ deal.id }}</td>
+                <td>{{ cell(deal.client_name) }}</td>
+                <td>{{ cell(deal.client_phone) }}</td>
+                <td>{{ cell(deal.client_email) }}</td>
+                <td>{{ cell(deal.client_telegram) }}</td>
+                <td>{{ cell(deal.plot) }}</td>
+                <td>{{ cell(deal.budget) }}</td>
+                <td>{{ cell(deal.area) }}</td>
+                <td>{{ cell(deal.material) }}</td>
+                <td>{{ cell(deal.timeline) }}</td>
+                <td>{{ cell(deal.funding_source) }}</td>
+                <td>
+                    <span
+                        class="etalon-score etalon-{{ deal.etalon_grade }}"
+                        title="{% if deal.etalon_missing %}Не хватает: {{ deal.etalon_missing|join(', ') }}{% else %}Все поля эталона заполнены{% endif %}"
+                    >{{ deal.etalon_score }}%</span>
+                </td>
+                <td class="status-{{ deal.status }}">{{ deal.status }}</td>
+                <td>{{ deal.created_at[:10] if deal.created_at else '—' }}</td>
+                <td>
+                    <a href="{{ url_for('deals.deal_detail', deal_id=deal.id) }}">Открыть</a>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="15" style="text-align: center; color: #999;">Нет сделок</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+</body>
+</html>

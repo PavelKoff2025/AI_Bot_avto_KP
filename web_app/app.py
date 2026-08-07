@@ -1,0 +1,171 @@
+import os
+import sqlite3
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify
+from functools import wraps
+from datetime import datetime
+import hashlib
+
+from routes_deals import deals_bp
+from db_utils import connect_db
+from etalon_score import etalon_match_score
+
+
+app = Flask(__name__)
+app.secret_key = os.getenv('SECRET_KEY', 'dev-secret-key')
+
+# === База данных ===
+def get_db():
+    return connect_db('deals.db')
+
+def init_db():
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    # Таблица пользователей
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL,
+            name TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
+    # Таблица сделок
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS deals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            client_name TEXT,
+            client_phone TEXT,
+            client_email TEXT,
+            client_telegram TEXT,
+            transcript TEXT,
+            kp_options TEXT,
+            ar_pdf TEXT,
+            ir_pdf TEXT,
+            delivery_method TEXT,
+            delivery_date TIMESTAMP,
+            status TEXT DEFAULT 'new',
+            last_reminder TIMESTAMP,
+            next_action_date TIMESTAMP,
+            notes TEXT,
+            user_id INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+    ''')
+    conn.commit()
+    # ensure extra columns (budget, plot, ...)
+    from db_utils import ensure_deal_columns
+    ensure_deal_columns(conn)
+    
+    # Добавляем тестового пользователя (если нет)
+    cursor.execute('SELECT * FROM users WHERE username = "admin"')
+    if not cursor.fetchone():
+        password_hash = hashlib.sha256('admin123'.encode()).hexdigest()
+        cursor.execute(
+            'INSERT INTO users (username, password, name) VALUES (?, ?, ?)',
+            ('admin', password_hash, 'Администратор')
+        )
+    
+    conn.commit()
+    conn.close()
+
+
+def _deal_with_etalon(row: sqlite3.Row) -> dict:
+    deal = dict(row)
+    match = etalon_match_score(deal)
+    deal["etalon_score"] = match["score"]
+    deal["etalon_grade"] = match["grade"]
+    deal["etalon_missing"] = match["missing"]
+    return deal
+
+# === Декоратор для проверки авторизации ===
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+# === Маршруты ===
+@app.route('/')
+def index():
+    return redirect(url_for('login'))
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        
+        if not username or not password:
+            return render_template('login.html', error='Введите логин и пароль')
+        
+        password_hash = hashlib.sha256(password.encode()).hexdigest()
+        conn = get_db()
+        user = conn.execute(
+            'SELECT * FROM users WHERE username = ? AND password = ?',
+            (username, password_hash)
+        ).fetchone()
+        conn.close()
+        
+        if user:
+            session['user_id'] = user['id']
+            session['username'] = user['username']
+            session['user_name'] = user['name']
+            return redirect(url_for('dashboard'))
+        else:
+            return render_template('login.html', error='Неверный логин или пароль')
+    
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
+
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    conn = get_db()
+    rows = conn.execute('''
+        SELECT * FROM deals 
+        WHERE user_id = ? OR user_id IS NULL
+        ORDER BY created_at DESC
+        LIMIT 50
+    ''', (session['user_id'],)).fetchall()
+    conn.close()
+    deals = [_deal_with_etalon(row) for row in rows]
+    
+    return render_template('dashboard.html', 
+        username=session.get('user_name') or session.get('username'),
+        deals=deals
+    )
+
+@app.route('/deal/<int:deal_id>')
+@login_required
+def deal_detail(deal_id):
+    conn = get_db()
+    deal = conn.execute(
+        'SELECT * FROM deals WHERE id = ?', (deal_id,)
+    ).fetchone()
+    conn.close()
+    
+    if not deal:
+        return 'Сделка не найдена', 404
+    
+    return render_template('deal_detail.html', deal=deal)
+
+@app.route('/health')
+def health():
+    return jsonify({"status": "ok"})
+
+# === Инициализация и запуск ===
+app.register_blueprint(deals_bp)
+
+if __name__ == '__main__':
+    init_db()
+    app.run(host='0.0.0.0', port=5001, debug=False)
