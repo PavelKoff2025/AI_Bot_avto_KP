@@ -7,6 +7,7 @@ from datetime import datetime
 import hashlib
 
 from routes_deals import deals_bp
+from routes_admin import admin_bp
 from db_utils import connect_db
 from etalon_score import etalon_match_score
 
@@ -173,6 +174,7 @@ def health():
 
 # === Инициализация и запуск ===
 app.register_blueprint(deals_bp)
+app.register_blueprint(admin_bp)
 
 if __name__ == '__main__':
     init_db()

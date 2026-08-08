@@ -14,9 +14,17 @@
 
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <h2 class="mb-0"><i class="bi bi-list-ul"></i> Список сделок</h2>
-    <a href="{{ url_for('deals.new_deal') }}" class="btn btn-primary">
-        <i class="bi bi-plus-circle"></i> Новая сделка
-    </a>
+    <div class="d-flex flex-wrap gap-2">
+        <button type="button" class="btn btn-outline-info" onclick="loadDemoData()">
+            <i class="bi bi-download"></i> Загрузить демо
+        </button>
+        <button type="button" class="btn btn-outline-danger" onclick="clearAllDeals()">
+            <i class="bi bi-trash"></i> Очистить
+        </button>
+        <a href="{{ url_for('deals.new_deal') }}" class="btn btn-primary">
+            <i class="bi bi-plus-circle"></i> Новая сделка
+        </a>
+    </div>
 </div>
 
 <div class="card mb-4 shadow-sm">
@@ -59,6 +67,41 @@
             Порог генерации КП: <strong>{{ kp_threshold }}%</strong>
             · эталон: телефон, email, telegram, участок, бюджет, площадь, материал, сроки, финансирование
         </p>
+    </div>
+</div>
+
+<div class="row mb-4 g-3">
+    <div class="col-md-3">
+        <div class="card text-bg-primary h-100">
+            <div class="card-body">
+                <h5 class="card-title">Всего сделок</h5>
+                <p class="card-text display-6 mb-0">{{ stats.total }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-bg-success h-100">
+            <div class="card-body">
+                <h5 class="card-title">Готовы к КП</h5>
+                <p class="card-text display-6 mb-0">{{ stats.ready }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-bg-warning h-100">
+            <div class="card-body">
+                <h5 class="card-title">Требуют доработки</h5>
+                <p class="card-text display-6 mb-0">{{ stats.incomplete }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-bg-info h-100">
+            <div class="card-body">
+                <h5 class="card-title">Средний % заполнения</h5>
+                <p class="card-text display-6 mb-0">{{ stats.avg_score }}%</p>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -272,41 +315,6 @@
         {% endif %}
     </div>
 </div>
-
-<div class="row mt-4 g-3">
-    <div class="col-md-3">
-        <div class="card text-bg-primary h-100">
-            <div class="card-body">
-                <h5 class="card-title">Всего сделок</h5>
-                <p class="card-text display-6 mb-0">{{ stats.total }}</p>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card text-bg-success h-100">
-            <div class="card-body">
-                <h5 class="card-title">Готовы к КП</h5>
-                <p class="card-text display-6 mb-0">{{ stats.ready }}</p>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card text-bg-warning h-100">
-            <div class="card-body">
-                <h5 class="card-title">Требуют доработки</h5>
-                <p class="card-text display-6 mb-0">{{ stats.incomplete }}</p>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card text-bg-info h-100">
-            <div class="card-body">
-                <h5 class="card-title">Средний % заполнения</h5>
-                <p class="card-text display-6 mb-0">{{ stats.avg_score }}%</p>
-            </div>
-        </div>
-    </div>
-</div>
 {% endblock %}
 
 {% block scripts %}
@@ -327,6 +335,49 @@ function generateKP(dealId) {
             return;
         }
         alert(data.message || 'КП запущено');
+    })
+    .catch((error) => alert('Ошибка: ' + error));
+}
+
+function clearAllDeals() {
+    if (!confirm('Вы уверены, что хотите удалить ВСЕ сделки?')) {
+        return;
+    }
+    if (!confirm('Это действие необратимо. Продолжить?')) {
+        return;
+    }
+    fetch('{{ url_for("admin.clear_deals") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+            alert('Ошибка: ' + (data.message || 'не удалось очистить'));
+            return;
+        }
+        alert(data.message || 'Сделки удалены');
+        location.reload();
+    })
+    .catch((error) => alert('Ошибка: ' + error));
+}
+
+function loadDemoData() {
+    if (!confirm('Загрузить 4 демо-протокола?\nСуществующие сделки будут удалены и заменены демо.')) {
+        return;
+    }
+    fetch('{{ url_for("admin.load_demo") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+            alert('Ошибка: ' + (data.message || 'не удалось загрузить демо'));
+            return;
+        }
+        alert(data.message || 'Демо загружено');
+        location.reload();
     })
     .catch((error) => alert('Ошибка: ' + error));
 }
