@@ -111,22 +111,21 @@
             <table class="table table-hover table-striped align-middle mb-0">
                 <thead class="table-dark">
                     <tr>
-                        <th>ID</th>
-                        <th>Клиент</th>
-                        <th>Телефон</th>
-                        <th>Email</th>
-                        <th>Telegram</th>
-                        <th>Участок</th>
-                        <th>Бюджет</th>
-                        <th>Площадь</th>
-                        <th>Материал</th>
-                        <th>Сроки</th>
-                        <th>Финансирование</th>
-                        <th>Эталон</th>
-                        <th>Готовность</th>
-                        <th>Статус</th>
-                        <th>Дата</th>
-                        <th>Действия</th>
+                        <th style="width: 50px;">ID</th>
+                        <th style="min-width: 120px;">Клиент</th>
+                        <th style="min-width: 130px;">Телефон</th>
+                        <th style="min-width: 150px;">Email</th>
+                        <th style="min-width: 80px;">Telegram</th>
+                        <th style="min-width: 100px;">Участок</th>
+                        <th style="min-width: 100px;">Бюджет</th>
+                        <th style="min-width: 100px;">Площадь</th>
+                        <th style="min-width: 100px;">Материал</th>
+                        <th style="min-width: 100px;">Сроки</th>
+                        <th style="min-width: 100px;">Финансирование</th>
+                        <th style="min-width: 80px;">Готовность</th>
+                        <th style="min-width: 80px;">Статус</th>
+                        <th style="min-width: 90px;">Дата</th>
+                        <th style="min-width: 120px;">Действия</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -155,7 +154,7 @@
                         <td>{{ cell(deal.funding_source) }}</td>
                         <td>
                             {% set completion = deal.etalon_score or 0 %}
-                            <div class="progress etalon-bar"
+                            <div class="progress etalon-bar mb-1"
                                  title="{% if deal.etalon_missing %}Не хватает: {{ deal.etalon_missing|join(', ') }}{% else %}Все поля заполнены{% endif %}">
                                 <div class="progress-bar
                                     {% if completion >= kp_threshold %}bg-success
@@ -169,8 +168,6 @@
                                     {{ completion }}%
                                 </div>
                             </div>
-                        </td>
-                        <td>
                             {% if deal.can_generate_kp %}
                                 <span class="badge text-bg-success">Готово к КП</span>
                             {% else %}
@@ -283,7 +280,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="16" class="text-center py-5">
+                        <td colspan="15" class="text-center py-5">
                             <i class="bi bi-inbox fs-1 d-block mb-2 text-muted"></i>
                             <p class="text-muted mb-3">Нет сделок по выбранным фильтрам.</p>
                             <a href="{{ url_for('deals.new_deal') }}" class="btn btn-primary">

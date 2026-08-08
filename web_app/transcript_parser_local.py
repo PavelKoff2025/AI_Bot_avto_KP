@@ -69,8 +69,15 @@ class TranscriptParser:
     def __init__(self, kp_threshold: int | None = None):
         self.kp_threshold = kp_threshold if kp_threshold is not None else KP_THRESHOLD
         self.patterns = {
+            # (?<!\d)/(?!\d) — не резать номер; компактные и форматированные формы
             "phone": re.compile(
-                r"(\+7|8)[\s\-]?\(?\d{3}\)?[\s\-]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2}"
+                r"(?<!\d)(?:"
+                r"\+?7[\s\-]*\(?\d{3}\)?[\s\-]*\d{3}[\s\-]*\d{2}[\s\-]*\d{2}|"  # +7 (916) 123-45-67
+                r"8[\s\-]*\(?\d{3}\)?[\s\-]*\d{3}[\s\-]*\d{2}[\s\-]*\d{2}|"     # 8-903-555-12-34 / 89161234567
+                r"\+?7[\s\-]*\(?\d{3}\)?[\s\-]*\d{3}[\s\-]*\d{4}|"              # +7(903)555-1234
+                r"8[\s\-]*\(?\d{3}\)?[\s\-]*\d{3}[\s\-]*\d{4}|"                 # 8(903)555-1234
+                r"9\d{9}"                                                        # 9035551234 (без кода страны)
+                r")(?!\d)"
             ),
             "email": re.compile(
                 r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
@@ -157,6 +164,31 @@ class TranscriptParser:
         text = str(value).strip(" .;,\t\r\n")
         return text or None
 
+    @staticmethod
+    def _clean_phone(phone: str) -> str:
+        """Нормализация телефона к формату +7XXXXXXXXXX."""
+        cleaned = re.sub(r"[^\d+]", "", phone)
+
+        if cleaned.startswith("+") and len(cleaned) in [11, 12]:
+            return cleaned
+
+        if cleaned.startswith("8") and len(cleaned) == 11:
+            return "+7" + cleaned[1:]
+
+        if cleaned.startswith("7") and len(cleaned) == 11:
+            return "+" + cleaned
+
+        if cleaned.startswith("8") and len(cleaned) == 10:
+            return "+7" + cleaned[1:]
+
+        if cleaned.startswith("9") and len(cleaned) == 10:
+            return "+7" + cleaned
+
+        if cleaned.startswith("9") and len(cleaned) == 9:
+            return "+7" + cleaned
+
+        return cleaned
+
     def parse_text(self, text: str) -> dict[str, Any]:
         """Парсинг текста: поля CRM + % заполнения + список недостающих."""
         result = self._empty_result()
@@ -173,7 +205,7 @@ class TranscriptParser:
         # --- Телефон ---
         phone_match = self.patterns["phone"].search(text)
         if phone_match:
-            result["client_phone"] = self._clean(phone_match.group(0))
+            result["client_phone"] = self._clean_phone(phone_match.group(0).strip())
 
         # --- Email ---
         email_match = self.patterns["email"].search(text)

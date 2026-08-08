@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+
+{% block title %}Редактирование сделки #{{ deal.id }} — Дом-Мастер{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h2 class="mb-0"><i class="bi bi-pencil"></i> Редактирование сделки #{{ deal.id }}</h2>
+    <div class="d-flex flex-wrap gap-2">
+        <a href="{{ url_for('deals.deal_detail', deal_id=deal.id) }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Назад
+        </a>
+        <a href="{{ url_for('deals.incomplete_data', deal_id=deal.id) }}" class="btn btn-outline-warning">
+            <i class="bi bi-list-check"></i> Недостающие данные
+        </a>
+    </div>
+</div>
+
+<form method="POST" enctype="multipart/form-data" class="row g-3">
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-person"></i> Основная информация</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">Клиент</label>
+                    <input type="text" name="client_name" class="form-control"
+                           value="{{ deal.client_name or '' }}">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Телефон</label>
+                    <input type="tel" name="client_phone" class="form-control"
+                           value="{{ deal.client_phone or '' }}"
+                           placeholder="+7...">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Email</label>
+                    <input type="email" name="client_email" class="form-control"
+                           value="{{ deal.client_email or '' }}">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Telegram</label>
+                    <input type="text" name="client_telegram" class="form-control"
+                           value="{{ deal.client_telegram or '' }}"
+                           placeholder="@username">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Статус</label>
+                    <select name="status" class="form-select">
+                        <option value="new" {% if deal.status == 'new' %}selected{% endif %}>Новая</option>
+                        <option value="sent" {% if deal.status == 'sent' %}selected{% endif %}>Отправлено</option>
+                        <option value="answered" {% if deal.status == 'answered' %}selected{% endif %}>Ответ получен</option>
+                        <option value="stalled" {% if deal.status == 'stalled' %}selected{% endif %}>Зависла</option>
+                        <option value="won" {% if deal.status == 'won' %}selected{% endif %}>Выиграна</option>
+                        <option value="lost" {% if deal.status == 'lost' %}selected{% endif %}>Проиграна</option>
+                    </select>
+                </div>
+                <div class="mb-0">
+                    <label class="form-label">Заметки</label>
+                    <textarea name="notes" class="form-control" rows="3">{{ deal.notes or '' }}</textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-house"></i> Параметры строительства</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">Участок (сотки/га)</label>
+                    <input type="text" name="plot" class="form-control"
+                           value="{{ deal.plot or '' }}"
+                           placeholder="например: 10 соток">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Бюджет</label>
+                    <input type="text" name="budget" class="form-control"
+                           value="{{ deal.budget or '' }}"
+                           placeholder="например: 7–8 млн руб.">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Площадь дома (м²)</label>
+                    <input type="text" name="area" class="form-control"
+                           value="{{ deal.area or '' }}"
+                           placeholder="например: 120–140 м²">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Материал стен</label>
+                    <input type="text" name="material" class="form-control"
+                           value="{{ deal.material or '' }}"
+                           placeholder="газобетон / кирпич / брус">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Сроки строительства</label>
+                    <input type="text" name="timeline" class="form-control"
+                           value="{{ deal.timeline or '' }}"
+                           placeholder="например: август 2026">
+                </div>
+                <div class="mb-0">
+                    <label class="form-label">Финансирование</label>
+                    <input type="text" name="funding_source" class="form-control"
+                           value="{{ deal.funding_source or '' }}"
+                           placeholder="свои / ипотека / маткапитал">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card shadow-sm">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-file-earmark-text"></i> Транскрибация</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">Загрузить протокол (.txt, .docx, .pdf)</label>
+                    <input type="file" name="file" class="form-control" accept=".txt,.doc,.docx,.pdf">
+                </div>
+                <div class="mb-0">
+                    <label class="form-label">Текст транскрибации</label>
+                    <textarea name="transcript" class="form-control" rows="8"
+                              placeholder="Вставьте текст протокола...">{{ deal.transcript or '' }}</textarea>
+                    <div class="form-text">
+                        При изменении текста пустые поля перепарсятся автоматически.
+                        Для генерации КП нужно ≥ {{ kp_threshold or 80 }}%.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 d-flex flex-wrap gap-2">
+        <button type="submit" class="btn btn-primary btn-lg">
+            <i class="bi bi-save"></i> Сохранить изменения
+        </button>
+        <a href="{{ url_for('deals.deal_detail', deal_id=deal.id) }}" class="btn btn-secondary btn-lg">
+            <i class="bi bi-x-circle"></i> Отмена
+        </a>
+    </div>
+</form>
+{% endblock %}

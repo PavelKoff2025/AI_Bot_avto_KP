@@ -306,7 +306,7 @@ def incomplete_data(deal_id):
     ]
 
     return render_template(
-        'incomplete_data.html',
+        'deals/incomplete_data.html',
         deal=deal,
         missing_items=missing_items,
         kp_threshold=KP_THRESHOLD,
@@ -316,26 +316,51 @@ def incomplete_data(deal_id):
 @deals_bp.route('/<int:deal_id>/edit', methods=['GET', 'POST'])
 @login_required
 def edit_deal(deal_id):
+    """Редактирование сделки со всеми полями эталона."""
     conn = get_db()
     deal = conn.execute('SELECT * FROM deals WHERE id = ?', (deal_id,)).fetchone()
     conn.close()
     if not deal:
         flash('Сделка не найдена', 'error')
         return redirect(url_for('deals.list_deals'))
+
     if request.method == 'POST':
-        client_name = request.form.get('client_name', '').strip()
-        client_phone = request.form.get('client_phone', '').strip()
-        client_email = request.form.get('client_email', '').strip()
-        client_telegram = request.form.get('client_telegram', '').strip()
-        transcript = request.form.get('transcript', '').strip()
-        notes = request.form.get('notes', '').strip()
-        status = request.form.get('status', 'new')
-        budget = request.form.get('budget', '').strip()
-        area = request.form.get('area', '').strip()
-        material = request.form.get('material', '').strip()
-        timeline = request.form.get('timeline', '').strip()
-        funding_source = request.form.get('funding_source', '').strip()
-        plot = request.form.get('plot', '').strip()
+        # Основные поля
+        client_name = request.form.get('client_name', deal['client_name'] or '').strip()
+        client_phone = request.form.get('client_phone', deal['client_phone'] or '').strip()
+        client_email = request.form.get('client_email', deal['client_email'] or '').strip()
+        client_telegram = (
+            request.form.get('client_telegram')
+            or request.form.get('telegram')
+            or deal['client_telegram']
+            or ''
+        ).strip()
+        status = request.form.get('status', deal['status'] or 'new').strip() or 'new'
+        notes = request.form.get('notes', deal['notes'] or '').strip()
+        transcript = request.form.get('transcript', deal['transcript'] or '').strip()
+
+        # Параметры строительства (алиасы из чернового API тоже принимаем)
+        plot = (
+            request.form.get('plot')
+            or request.form.get('plot_size')
+            or deal['plot']
+            or ''
+        ).strip()
+        budget = request.form.get('budget', deal['budget'] or '').strip()
+        area = request.form.get('area', deal['area'] or '').strip()
+        material = request.form.get('material', deal['material'] or '').strip()
+        timeline = (
+            request.form.get('timeline')
+            or request.form.get('deadline')
+            or deal['timeline']
+            or ''
+        ).strip()
+        funding_source = (
+            request.form.get('funding_source')
+            or request.form.get('financing')
+            or deal['funding_source']
+            or ''
+        ).strip()
 
         # Если менеджер дополнил транскрибацию — перепарсить и заполнить пустые поля
         if transcript and transcript != (deal['transcript'] or ''):
@@ -353,43 +378,52 @@ def edit_deal(deal_id):
                 client_telegram = client_telegram or reparsed.get('client_telegram') or ''
             except Exception as e:
                 logger.error(f"Ошибка перепарсинга при редактировании: {e}")
+                flash(f'Ошибка обновления данных транскрибации: {e}', 'warning')
 
-        conn = get_db()
-        conn.execute('''
-            UPDATE deals SET
-                client_name = ?, client_phone = ?, client_email = ?, client_telegram = ?,
-                transcript = ?, notes = ?, status = ?,
-                plot = ?, budget = ?, area = ?, material = ?, timeline = ?, funding_source = ?
-            WHERE id = ?
-        ''', (
-            client_name, client_phone, client_email, client_telegram,
-            transcript, notes, status,
-            plot, budget, area, material, timeline, funding_source,
-            deal_id
-        ))
-        conn.commit()
-
-        updated = conn.execute('SELECT * FROM deals WHERE id = ?', (deal_id,)).fetchone()
-        conn.close()
-        match = etalon_match_score(updated)
-
-        if match['is_complete']:
-            flash('Сделка обновлена! Данные соответствуют эталону на 100%.', 'success')
-            return redirect(url_for('deals.deal_detail', deal_id=deal_id))
-        if match['can_generate_kp']:
-            flash(
-                f'Сделка обновлена. Заполнение {match["score"]}% — КП можно генерировать.',
-                'success',
+        try:
+            conn = get_db()
+            conn.execute(
+                '''
+                UPDATE deals SET
+                    client_name = ?, client_phone = ?, client_email = ?, client_telegram = ?,
+                    transcript = ?, notes = ?, status = ?,
+                    plot = ?, budget = ?, area = ?, material = ?, timeline = ?, funding_source = ?
+                WHERE id = ?
+                ''',
+                (
+                    client_name, client_phone, client_email, client_telegram,
+                    transcript, notes, status,
+                    plot, budget, area, material, timeline, funding_source,
+                    deal_id,
+                ),
             )
-        else:
-            flash(
-                f'Сделка обновлена. Заполнение {match["score"]}% — ещё не хватает данных для КП.',
-                'warning',
-            )
-        return redirect(url_for('deals.incomplete_data', deal_id=deal_id))
+            conn.commit()
+            updated = conn.execute('SELECT * FROM deals WHERE id = ?', (deal_id,)).fetchone()
+            conn.close()
+
+            # Пересчитываем % заполнения эталона
+            match = etalon_match_score(updated)
+            if match['is_complete']:
+                flash('Сделка обновлена! Данные соответствуют эталону на 100%.', 'success')
+            elif match['can_generate_kp']:
+                flash(
+                    f'Сделка обновлена. Заполнение {match["score"]}% — КП можно генерировать.',
+                    'success',
+                )
+            else:
+                flash(
+                    f'Сделка обновлена. Заполнение {match["score"]}% — ещё не хватает данных для КП.',
+                    'warning',
+                )
+        except Exception as e:
+            logger.error(f"Ошибка сохранения сделки #{deal_id}: {e}")
+            flash(f'Ошибка обновления данных: {e}', 'warning')
+            return redirect(url_for('deals.edit_deal', deal_id=deal_id))
+
+        return redirect(url_for('deals.deal_detail', deal_id=deal_id))
 
     return render_template(
-        'deal_form.html',
+        'deals/edit.html',
         deal=deal,
         edit=True,
         kp_threshold=KP_THRESHOLD,
