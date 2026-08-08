@@ -1,4 +1,5 @@
 import os
+import json
 import sqlite3
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 from functools import wraps
@@ -12,6 +13,21 @@ from etalon_score import etalon_match_score
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'dev-secret-key')
+
+
+@app.template_filter('from_json')
+def from_json_filter(value):
+    """Парсит JSON-строку в шаблонах: {{ deal.transcript_data|from_json }}."""
+    if value is None or value == '':
+        return {}
+    if isinstance(value, (dict, list)):
+        return value
+    try:
+        data = json.loads(value)
+        return data if isinstance(data, (dict, list)) else {}
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
+
 
 # === База данных ===
 def get_db():
@@ -148,16 +164,8 @@ def dashboard():
 @app.route('/deal/<int:deal_id>')
 @login_required
 def deal_detail(deal_id):
-    conn = get_db()
-    deal = conn.execute(
-        'SELECT * FROM deals WHERE id = ?', (deal_id,)
-    ).fetchone()
-    conn.close()
-    
-    if not deal:
-        return 'Сделка не найдена', 404
-    
-    return render_template('deal_detail.html', deal=deal)
+    """Совместимость: старый URL → карточка сделки в blueprint."""
+    return redirect(url_for('deals.deal_detail', deal_id=deal_id))
 
 @app.route('/health')
 def health():

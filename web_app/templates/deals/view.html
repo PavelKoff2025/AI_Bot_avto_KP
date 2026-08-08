@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+
+{% block title %}Сделка #{{ deal.id }} — Дом-Мастер{% endblock %}
+
+{% block content %}
+{% set completion = data.completion_percent if data else (deal.etalon_score or 0) %}
+{% set ready = data.is_complete if data else deal.can_generate_kp %}
+
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h2 class="mb-0">
+        <i class="bi bi-file-text"></i>
+        Сделка #{{ deal.id }}{% if deal.client_name %}: {{ deal.client_name }}{% endif %}
+    </h2>
+    <div class="d-flex flex-wrap gap-2">
+        <a href="{{ url_for('deals.list_deals') }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Назад
+        </a>
+        <a href="{{ url_for('deals.edit_deal', deal_id=deal.id) }}" class="btn btn-primary">
+            <i class="bi bi-pencil"></i> Редактировать
+        </a>
+        {% if not ready %}
+        <a href="{{ url_for('deals.incomplete_data', deal_id=deal.id) }}" class="btn btn-warning">
+            <i class="bi bi-list-check"></i> Недостающие данные
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header">
+                <h5 class="mb-0">Информация о клиенте</h5>
+            </div>
+            <div class="card-body">
+                <table class="table mb-0">
+                    <tr>
+                        <th style="width: 40%">Клиент</th>
+                        <td><strong>{{ deal.client_name or '—' }}</strong></td>
+                    </tr>
+                    <tr>
+                        <th>Телефон</th>
+                        <td>
+                            {% if deal.client_phone %}
+                                <a href="tel:{{ deal.client_phone }}" class="text-decoration-none">{{ deal.client_phone }}</a>
+                            {% else %}
+                                <span class="text-danger">не указан</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Email</th>
+                        <td>
+                            {% if deal.client_email %}
+                                <a href="mailto:{{ deal.client_email }}" class="text-decoration-none">{{ deal.client_email }}</a>
+                            {% else %}
+                                <span class="text-danger">не указан</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Telegram</th>
+                        <td>
+                            {% if deal.client_telegram %}
+                                {{ deal.client_telegram }}
+                            {% else %}
+                                <span class="text-danger">не указан</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Статус</th>
+                        <td>
+                            <span class="badge
+                                {% if deal.status == 'won' %}text-bg-success
+                                {% elif deal.status == 'sent' or deal.status == 'answered' %}text-bg-info
+                                {% elif deal.status == 'lost' %}text-bg-danger
+                                {% elif deal.status == 'stalled' %}text-bg-warning text-dark
+                                {% else %}text-bg-secondary{% endif %}">
+                                {{ deal.status }}
+                            </span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Создана</th>
+                        <td>{{ deal.created_at[:16] if deal.created_at else '—' }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header">
+                <h5 class="mb-0">Заполнение данных (эталон)</h5>
+            </div>
+            <div class="card-body text-center">
+                <div class="display-3 fw-bold mb-2
+                    {% if completion >= kp_threshold %}text-success
+                    {% elif completion >= 50 %}text-warning
+                    {% else %}text-danger{% endif %}">
+                    {{ completion }}%
+                </div>
+                <div class="progress mb-3" style="height: 28px;">
+                    <div class="progress-bar
+                        {% if completion >= kp_threshold %}bg-success
+                        {% elif completion >= 50 %}bg-warning text-dark
+                        {% else %}bg-danger{% endif %}"
+                        role="progressbar"
+                        style="width: {{ completion }}%;"
+                        aria-valuenow="{{ completion }}"
+                        aria-valuemin="0"
+                        aria-valuemax="100">
+                        {{ completion }}%
+                    </div>
+                </div>
+
+                {% if ready %}
+                    <div class="alert alert-success">
+                        <i class="bi bi-check-circle-fill"></i>
+                        Данных достаточно для генерации КП (≥ {{ kp_threshold }}%).
+                    </div>
+                    <button class="btn btn-success btn-lg" type="button" onclick="generateKP({{ deal.id }})">
+                        <i class="bi bi-file-pdf"></i> Сгенерировать КП
+                    </button>
+                {% else %}
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle-fill"></i>
+                        Недостаточно данных (нужно минимум {{ kp_threshold }}%).
+                    </div>
+                    <div class="d-grid gap-2">
+                        <a href="{{ url_for('deals.incomplete_data', deal_id=deal.id) }}" class="btn btn-warning">
+                            <i class="bi bi-list-check"></i> Посмотреть недостающие поля
+                        </a>
+                        <a href="{{ url_for('deals.edit_deal', deal_id=deal.id) }}" class="btn btn-primary">
+                            <i class="bi bi-pencil"></i> Дополнить данные
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card shadow-sm">
+            <div class="card-header">
+                <h5 class="mb-0">Распарсенные данные</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped mb-0">
+                        <thead>
+                            <tr>
+                                <th>Поле</th>
+                                <th>Значение</th>
+                                <th>Статус</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in field_rows %}
+                            <tr>
+                                <td><strong>{{ item.label }}</strong></td>
+                                <td>
+                                    {% if item.value %}
+                                        {{ item.value }}
+                                    {% else %}
+                                        <span class="text-danger">Нужно уточнить</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if item.value %}
+                                        <span class="badge text-bg-success">есть</span>
+                                    {% else %}
+                                        <span class="badge text-bg-danger">нет</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                {% if deal.etalon_missing %}
+                <div class="alert alert-danger mt-3 mb-0">
+                    <h6 class="alert-heading">Недостающие поля</h6>
+                    <ul class="mb-0">
+                        {% for field in deal.etalon_missing %}
+                        <li>{{ field }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header"><h5 class="mb-0">Транскрибация</h5></div>
+            <div class="card-body">
+                <pre class="mb-0 small" style="white-space: pre-wrap; max-height: 320px; overflow: auto;">{{ deal.transcript or '—' }}</pre>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header"><h5 class="mb-0">Заметки и статус</h5></div>
+            <div class="card-body">
+                <p class="mb-3">{{ deal.notes or '—' }}</p>
+                <div class="d-flex flex-wrap gap-2">
+                    <button class="btn btn-outline-warning btn-sm" type="button" onclick="updateStatus('sent')">Отправлено</button>
+                    <button class="btn btn-outline-success btn-sm" type="button" onclick="updateStatus('won')">Выиграна</button>
+                    <button class="btn btn-outline-danger btn-sm" type="button" onclick="updateStatus('lost')">Проиграна</button>
+                    <button class="btn btn-outline-secondary btn-sm" type="button" onclick="updateStatus('stalled')">Зависла</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card shadow-sm">
+            <div class="card-header"><h5 class="mb-0">История действий</h5></div>
+            <div class="card-body">
+                <p class="text-muted text-center py-4 mb-0">История действий будет отображаться здесь</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function generateKP(dealId) {
+    if (!confirm('Сгенерировать коммерческое предложение для сделки #' + dealId + '?')) {
+        return;
+    }
+    fetch('/deals/' + dealId + '/generate-kp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok || data.status === 'error') {
+            alert('Ошибка: ' + (data.message || 'недостаточно данных'));
+            if (data.redirect) window.location = data.redirect;
+            return;
+        }
+        alert(data.message || 'КП запущено');
+    })
+    .catch((error) => alert('Ошибка: ' + error));
+}
+
+function updateStatus(status) {
+    if (!confirm('Изменить статус на "' + status + '"?')) return;
+    fetch('{{ url_for("deals.update_status", deal_id=deal.id) }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: status })
+    })
+    .then((response) => response.json())
+    .then(() => location.reload())
+    .catch((error) => alert('Ошибка: ' + error));
+}
+</script>
+{% endblock %}

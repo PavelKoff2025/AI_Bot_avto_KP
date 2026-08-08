@@ -1,0 +1,334 @@
+{% extends "base.html" %}
+
+{% block title %}Список сделок — Дом-Мастер{% endblock %}
+
+{% block content %}
+{% macro cell(val) -%}
+    {%- set text = (val|string)|trim if val is not none else '' -%}
+    {%- if text and text not in ['—', '-', 'None', 'null'] -%}
+        <span class="text-success">{{ text }}</span>
+    {%- else -%}
+        <span class="cell-missing"><i class="bi bi-x-circle"></i></span>
+    {%- endif -%}
+{%- endmacro %}
+
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h2 class="mb-0"><i class="bi bi-list-ul"></i> Список сделок</h2>
+    <a href="{{ url_for('deals.new_deal') }}" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> Новая сделка
+    </a>
+</div>
+
+<div class="card mb-4 shadow-sm">
+    <div class="card-body">
+        <form method="GET" action="{{ url_for('deals.list_deals') }}" class="row g-3">
+            <div class="col-md-3">
+                <label class="form-label">Статус заполнения</label>
+                <select name="completion_status" class="form-select">
+                    <option value="" {% if not completion_status %}selected{% endif %}>Все</option>
+                    <option value="high" {% if completion_status == 'high' %}selected{% endif %}>80–100% (готово к КП)</option>
+                    <option value="medium" {% if completion_status == 'medium' %}selected{% endif %}>50–79% (требуется уточнение)</option>
+                    <option value="low" {% if completion_status == 'low' %}selected{% endif %}>0–49% (много пропусков)</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Статус сделки</label>
+                <select name="status" class="form-select">
+                    <option value="" {% if not status_filter %}selected{% endif %}>Все</option>
+                    <option value="new" {% if status_filter == 'new' %}selected{% endif %}>Новая</option>
+                    <option value="sent" {% if status_filter == 'sent' %}selected{% endif %}>Отправлено</option>
+                    <option value="answered" {% if status_filter == 'answered' %}selected{% endif %}>Ответ получен</option>
+                    <option value="stalled" {% if status_filter == 'stalled' %}selected{% endif %}>Зависла</option>
+                    <option value="won" {% if status_filter == 'won' %}selected{% endif %}>Выиграна</option>
+                    <option value="lost" {% if status_filter == 'lost' %}selected{% endif %}>Проиграна</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Поиск</label>
+                <input type="text" name="search" class="form-control"
+                       placeholder="Имя, телефон, email..."
+                       value="{{ search or '' }}">
+            </div>
+            <div class="col-md-2 d-flex align-items-end gap-2">
+                <button type="submit" class="btn btn-secondary w-100">
+                    <i class="bi bi-search"></i> Фильтр
+                </button>
+            </div>
+        </form>
+        <p class="text-muted small mt-3 mb-0">
+            Порог генерации КП: <strong>{{ kp_threshold }}%</strong>
+            · эталон: телефон, email, telegram, участок, бюджет, площадь, материал, сроки, финансирование
+        </p>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover table-striped align-middle mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>ID</th>
+                        <th>Клиент</th>
+                        <th>Телефон</th>
+                        <th>Email</th>
+                        <th>Telegram</th>
+                        <th>Участок</th>
+                        <th>Бюджет</th>
+                        <th>Площадь</th>
+                        <th>Материал</th>
+                        <th>Сроки</th>
+                        <th>Финансирование</th>
+                        <th>Эталон</th>
+                        <th>Готовность</th>
+                        <th>Статус</th>
+                        <th>Дата</th>
+                        <th>Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for deal in deals %}
+                    <tr>
+                        <td><strong>{{ deal.id }}</strong></td>
+                        <td>
+                            <a href="{{ url_for('deals.deal_detail', deal_id=deal.id) }}" class="text-decoration-none fw-semibold">
+                                {{ deal.client_name or 'Не указан' }}
+                            </a>
+                        </td>
+                        <td>{{ cell(deal.client_phone) }}</td>
+                        <td>{{ cell(deal.client_email) }}</td>
+                        <td>
+                            {% if deal.client_telegram %}
+                                <span class="badge text-bg-success"><i class="bi bi-telegram"></i> {{ deal.client_telegram }}</span>
+                            {% else %}
+                                <span class="badge text-bg-secondary">нет</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ cell(deal.plot) }}</td>
+                        <td>{{ cell(deal.budget) }}</td>
+                        <td>{{ cell(deal.area) }}</td>
+                        <td>{{ cell(deal.material) }}</td>
+                        <td>{{ cell(deal.timeline) }}</td>
+                        <td>{{ cell(deal.funding_source) }}</td>
+                        <td>
+                            {% set completion = deal.etalon_score or 0 %}
+                            <div class="progress etalon-bar"
+                                 title="{% if deal.etalon_missing %}Не хватает: {{ deal.etalon_missing|join(', ') }}{% else %}Все поля заполнены{% endif %}">
+                                <div class="progress-bar
+                                    {% if completion >= kp_threshold %}bg-success
+                                    {% elif completion >= 50 %}bg-warning text-dark
+                                    {% else %}bg-danger{% endif %}"
+                                    role="progressbar"
+                                    style="width: {{ completion }}%;"
+                                    aria-valuenow="{{ completion }}"
+                                    aria-valuemin="0"
+                                    aria-valuemax="100">
+                                    {{ completion }}%
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            {% if deal.can_generate_kp %}
+                                <span class="badge text-bg-success">Готово к КП</span>
+                            {% else %}
+                                <span class="badge text-bg-warning text-dark">Неполные</span>
+                            {% endif %}
+                        </td>
+                        <td><span class="badge text-bg-light text-dark border">{{ deal.status }}</span></td>
+                        <td>{{ deal.created_at[:10] if deal.created_at else '—' }}</td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <a href="{{ url_for('deals.deal_detail', deal_id=deal.id) }}"
+                                   class="btn btn-outline-primary" title="Просмотр">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                <a href="{{ url_for('deals.edit_deal', deal_id=deal.id) }}"
+                                   class="btn btn-outline-secondary" title="Редактировать">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                {% if not deal.can_generate_kp %}
+                                <button type="button" class="btn btn-outline-warning"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#incompleteModal{{ deal.id }}"
+                                        title="Недостающие данные">
+                                    <i class="bi bi-exclamation-triangle"></i>
+                                </button>
+                                {% else %}
+                                <button type="button" class="btn btn-outline-success"
+                                        onclick="generateKP({{ deal.id }})"
+                                        title="Сгенерировать КП">
+                                    <i class="bi bi-file-pdf"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+
+                            {% if deal.etalon_missing %}
+                            <div class="modal fade" id="incompleteModal{{ deal.id }}" tabindex="-1" aria-hidden="true">
+                                <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                                    <div class="modal-content">
+                                        <div class="modal-header bg-warning">
+                                            <h5 class="modal-title">
+                                                <i class="bi bi-exclamation-triangle-fill"></i>
+                                                Недостающие данные — сделка #{{ deal.id }}
+                                            </h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <div class="modal-body text-start">
+                                            <div class="alert alert-info">
+                                                <h6 class="mb-2">Заполнено: {{ deal.etalon_score }}%</h6>
+                                                <div class="progress" style="height: 18px;">
+                                                    <div class="progress-bar
+                                                        {% if deal.etalon_score >= kp_threshold %}bg-success
+                                                        {% elif deal.etalon_score >= 50 %}bg-warning text-dark
+                                                        {% else %}bg-danger{% endif %}"
+                                                        role="progressbar"
+                                                        style="width: {{ deal.etalon_score }}%;">
+                                                        {{ deal.etalon_score }}%
+                                                    </div>
+                                                </div>
+                                                <p class="mt-2 mb-0 small">
+                                                    Для генерации КП нужно минимум {{ kp_threshold }}%
+                                                </p>
+                                            </div>
+
+                                            <h6>Недостающие поля</h6>
+                                            <ul class="list-group mb-3">
+                                                {% for field in deal.etalon_missing %}
+                                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                    <span><i class="bi bi-question-circle text-danger"></i> {{ field }}</span>
+                                                    <span class="badge text-bg-danger">требуется</span>
+                                                </li>
+                                                {% endfor %}
+                                            </ul>
+
+                                            <div class="card bg-light border-0">
+                                                <div class="card-body">
+                                                    <h6>Скрипт для дозвона</h6>
+                                                    <div class="p-2 bg-white rounded border">
+                                                        <p class="mb-2">
+                                                            <strong>Менеджер:</strong>
+                                                            «Здравствуйте{% if deal.client_name %}, {{ deal.client_name }}{% endif %}!
+                                                            Готовим КП, нужно уточнить несколько деталей:»
+                                                        </p>
+                                                        <ul class="mb-0">
+                                                            {% for q in deal.etalon_questions %}
+                                                            <li>{{ q }}</li>
+                                                            {% else %}
+                                                                {% for field in deal.etalon_missing %}
+                                                                <li>Уточните, пожалуйста: {{ field }}</li>
+                                                                {% endfor %}
+                                                            {% endfor %}
+                                                        </ul>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="mt-3 d-flex flex-wrap gap-2">
+                                                <a href="{{ url_for('deals.edit_deal', deal_id=deal.id) }}" class="btn btn-primary">
+                                                    <i class="bi bi-pencil"></i> Внести данные
+                                                </a>
+                                                <a href="{{ url_for('deals.incomplete_data', deal_id=deal.id) }}" class="btn btn-outline-info">
+                                                    <i class="bi bi-arrow-right"></i> Подробные подсказки
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="16" class="text-center py-5">
+                            <i class="bi bi-inbox fs-1 d-block mb-2 text-muted"></i>
+                            <p class="text-muted mb-3">Нет сделок по выбранным фильтрам.</p>
+                            <a href="{{ url_for('deals.new_deal') }}" class="btn btn-primary">
+                                <i class="bi bi-plus-circle"></i> Создать сделку
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if pagination and pagination.pages > 1 %}
+        <nav class="mt-4" aria-label="Навигация по страницам">
+            <ul class="pagination justify-content-center mb-0">
+                <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+                    <a class="page-link" href="{{ pagination.prev_url or '#' }}">«</a>
+                </li>
+                {% for page in pagination.pages_range %}
+                <li class="page-item {% if page == pagination.current_page %}active{% endif %}">
+                    <a class="page-link" href="{{ pagination.url_for_page(page) }}">{{ page }}</a>
+                </li>
+                {% endfor %}
+                <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+                    <a class="page-link" href="{{ pagination.next_url or '#' }}">»</a>
+                </li>
+            </ul>
+        </nav>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row mt-4 g-3">
+    <div class="col-md-3">
+        <div class="card text-bg-primary h-100">
+            <div class="card-body">
+                <h5 class="card-title">Всего сделок</h5>
+                <p class="card-text display-6 mb-0">{{ stats.total }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-bg-success h-100">
+            <div class="card-body">
+                <h5 class="card-title">Готовы к КП</h5>
+                <p class="card-text display-6 mb-0">{{ stats.ready }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-bg-warning h-100">
+            <div class="card-body">
+                <h5 class="card-title">Требуют доработки</h5>
+                <p class="card-text display-6 mb-0">{{ stats.incomplete }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-bg-info h-100">
+            <div class="card-body">
+                <h5 class="card-title">Средний % заполнения</h5>
+                <p class="card-text display-6 mb-0">{{ stats.avg_score }}%</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function generateKP(dealId) {
+    if (!confirm('Сгенерировать коммерческое предложение для сделки #' + dealId + '?')) {
+        return;
+    }
+    fetch('/deals/' + dealId + '/generate-kp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok || data.status === 'error') {
+            alert('Ошибка: ' + (data.message || 'недостаточно данных'));
+            if (data.redirect) window.location = data.redirect;
+            return;
+        }
+        alert(data.message || 'КП запущено');
+    })
+    .catch((error) => alert('Ошибка: ' + error));
+}
+</script>
+{% endblock %}

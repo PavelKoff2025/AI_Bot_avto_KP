@@ -27,7 +27,7 @@
 - Команды `/start`, `/help`, сброс сессии «Новый звонок»
 
 ### 2. Проверка достаточности данных (LLM)
-Сравнение с эталоном `sample_dialog.txt` (протокол звонка № 12/07):
+Сравнение с эталоном `knowledge_base/etalon_protocol.md` (fallback: `sample_dialog.txt`):
 - хватает ли площади, этажности, материалов, бюджета, сроков, пожеланий;
 - извлекает имя заказчика для документов;
 - если данных мало — бот просит дополнить транскрибацию и указывает, чего не хватает.
@@ -117,6 +117,7 @@ cp .env.example .env
 | `TELEGRAM_ALLOWED_IDS` | user id через запятую (рекомендуется) |
 | `FLASK_API_TOKEN` | токен для HTTP API (рекомендуется вне localhost) |
 | `FLASK_PORT` | порт Flask (по умолчанию `5000`) |
+| `ETALON_KP_THRESHOLD` | порог заполнения эталона (%) для генерации КП в CRM (по умолчанию `80`) |
 
 ### 4. Запуск бота
 
@@ -191,6 +192,25 @@ BASE_URL=http://127.0.0.1:5002 ./scripts/check_endpoints.sh --quick
   Скачать · Объединить · ZIP · (E-mail)
 ```
 
+### CRM (`web_app/`): проверка по эталону
+
+В веб-CRM сравнение с эталоном **детерминированное** (regex-парсер + % заполнения полей):
+
+```text
+Транскрибация / файл
+        ↓
+  parse_transcript_local + validate_against_etalon()
+        ↓
+  score = % заполненных полей эталона
+        ↓
+  < 100%  →  страница «Недостающие данные» + вопросы клиенту
+  ≥ ETALON_KP_THRESHOLD (80%)  →  можно генерировать КП
+  < 80%   →  КП заблокировано, нужно дособрать
+```
+
+Обязательные поля эталона: телефон, email, telegram, участок, бюджет, площадь, материал, сроки, финансирование.  
+Тесты: `cd web_app && PYTHONPATH=. python3 -m unittest tests.test_etalon_validation -v`
+
 ---
 
 ## Структура проекта
@@ -203,7 +223,10 @@ BASE_URL=http://127.0.0.1:5002 ./scripts/check_endpoints.sh --quick
 ├── Dockerfile             # образ Flask/bot
 ├── docker-compose.yml     # api / go-api / bot
 ├── scripts/               # push/pull Docker Hub, check endpoints
-├── sample_dialog.txt      # эталон транскрибации
+├── sample_dialog.txt      # пример транскрибации (fallback эталона)
+├── knowledge_base/
+│   └── etalon_protocol.md # эталон обязательных полей для КП
+├── web_app/               # CRM менеджера: сделки + проверка эталона
 ├── requirements.txt       # зависимости (диапазоны)
 ├── requirements.lock.txt  # зафиксированные версии
 ├── AUDIT.md               # аудит кода

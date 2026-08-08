@@ -6,7 +6,7 @@
     <style>
         body { font-family: Arial; padding: 20px; max-width: 800px; margin: 0 auto; }
         label { display: block; margin-top: 15px; font-weight: bold; }
-        input, textarea, select { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ddd; border-radius: 4px; }
+        input, textarea, select { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
         textarea { min-height: 150px; }
         .btn { display: inline-block; padding: 10px 20px; background: #007bff; color: #fff; text-decoration: none; border: none; border-radius: 4px; cursor: pointer; margin-top: 15px; }
         .btn:hover { background: #0056b3; }
@@ -15,13 +15,21 @@
         .flash { padding: 10px; margin: 10px 0; border-radius: 4px; }
         .flash-error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
         .flash-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .flash-warning { background: #fff3cd; color: #664d03; border: 1px solid #ffe69c; }
         .file-upload { border: 2px dashed #ddd; padding: 20px; text-align: center; border-radius: 8px; }
         .file-upload input { width: auto; }
+        .section-title { margin-top: 28px; margin-bottom: 0; font-size: 16px; color: #333; }
+        .hint { color: #888; font-size: 13px; margin-top: 4px; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+        @media (max-width: 640px) { .grid-2 { grid-template-columns: 1fr; } }
     </style>
 </head>
 <body>
     <h1>{% if edit %}Редактирование сделки #{{ deal.id }}{% else %}Новая сделка{% endif %}</h1>
     <a href="{{ url_for('deals.list_deals') }}">← Назад к списку</a>
+    {% if edit %}
+    <a href="{{ url_for('deals.incomplete_data', deal_id=deal.id) }}" style="margin-left: 12px;">Недостающие данные</a>
+    {% endif %}
     
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
@@ -40,20 +48,57 @@
         
         <label>Или вставьте текст транскрибации</label>
         <textarea name="transcript" rows="10">{{ deal.transcript if deal else '' }}</textarea>
+        <p class="hint">При сохранении система сравнит данные с эталоном. Для генерации КП нужно ≥ {{ kp_threshold or 80 }}%.</p>
         
         <hr style="margin: 30px 0;">
         
         <label>Имя клиента</label>
         <input type="text" name="client_name" value="{{ deal.client_name if deal else '' }}">
         
-        <label>Телефон</label>
-        <input type="text" name="client_phone" value="{{ deal.client_phone if deal else '' }}">
-        
-        <label>Email</label>
-        <input type="email" name="client_email" value="{{ deal.client_email if deal else '' }}">
+        <div class="grid-2">
+            <div>
+                <label>Телефон</label>
+                <input type="text" name="client_phone" value="{{ deal.client_phone if deal else '' }}">
+            </div>
+            <div>
+                <label>Email</label>
+                <input type="email" name="client_email" value="{{ deal.client_email if deal else '' }}">
+            </div>
+        </div>
         
         <label>Telegram</label>
         <input type="text" name="client_telegram" value="{{ deal.client_telegram if deal else '' }}">
+
+        <h3 class="section-title">Поля эталона для КП</h3>
+        <p class="hint">Можно дополнить вручную, если парсер не извлёк значение.</p>
+
+        <label>Участок</label>
+        <input type="text" name="plot" value="{{ deal.plot if deal else '' }}" placeholder="например: 10 соток, Дмитровское шоссе">
+
+        <div class="grid-2">
+            <div>
+                <label>Бюджет</label>
+                <input type="text" name="budget" value="{{ deal.budget if deal else '' }}" placeholder="например: 7–8 млн руб.">
+            </div>
+            <div>
+                <label>Площадь</label>
+                <input type="text" name="area" value="{{ deal.area if deal else '' }}" placeholder="например: 120–140 м²">
+            </div>
+        </div>
+
+        <div class="grid-2">
+            <div>
+                <label>Материал стен</label>
+                <input type="text" name="material" value="{{ deal.material if deal else '' }}" placeholder="газобетон / кирпич / брус">
+            </div>
+            <div>
+                <label>Сроки старта</label>
+                <input type="text" name="timeline" value="{{ deal.timeline if deal else '' }}" placeholder="например: август 2026">
+            </div>
+        </div>
+
+        <label>Источник финансирования</label>
+        <input type="text" name="funding_source" value="{{ deal.funding_source if deal else '' }}" placeholder="свои / ипотека / маткапитал">
         
         <label>Заметки</label>
         <textarea name="notes" rows="3">{{ deal.notes if deal else '' }}</textarea>
@@ -70,9 +115,8 @@
         </select>
         {% endif %}
         
-        <button type="submit" class="btn">{% if edit %}Сохранить{% else %}Создать{% endif %}</button>
-        <a href="{{ url_for('deals.list_deals') }}" class="btn btn-cancel">Отмена</a>
+        <button type="submit" class="btn">{% if edit %}Дополнить и продолжить{% else %}Создать{% endif %}</button>
+        <a href="{% if edit %}{{ url_for('deals.incomplete_data', deal_id=deal.id) }}{% else %}{{ url_for('deals.list_deals') }}{% endif %}" class="btn btn-cancel">Отмена</a>
     </form>
 </body>
-</html>        
- 
+</html>

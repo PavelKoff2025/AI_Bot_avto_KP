@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Дом-Мастер{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <style>
+        body { background: #f5f7fb; }
+        .navbar-brand { font-weight: 700; }
+        .progress.etalon-bar { height: 22px; width: 88px; font-size: 12px; font-weight: 700; }
+        .cell-missing { color: #dc3545; font-weight: 600; white-space: nowrap; }
+        .table td { vertical-align: middle; font-size: 13px; max-width: 140px; word-break: break-word; }
+        .table th { white-space: nowrap; font-size: 13px; }
+        {% block extra_css %}{% endblock %}
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{{ url_for('deals.list_deals') }}">Дом-Мастер</a>
+            <div class="d-flex align-items-center gap-3">
+                <span class="text-white-50 small">
+                    {{ session.get('user_name', session.get('username', 'Менеджер')) }}
+                </span>
+                <a class="btn btn-sm btn-outline-light" href="{{ url_for('logout') }}">Выйти</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container-fluid px-4 pb-5">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
