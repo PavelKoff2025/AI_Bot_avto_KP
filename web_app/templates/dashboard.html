@@ -98,7 +98,7 @@
                 <th>Email</th>
                 <th>Telegram</th>
                 <th>Участок</th>
-                <th>Бюджет</th>
+                <th>Стоимость ТК</th>
                 <th>Площадь</th>
                 <th>Материал</th>
                 <th>Сроки</th>
@@ -118,7 +118,7 @@
                 <td>{{ cell(deal.client_email) }}</td>
                 <td>{{ cell(deal.client_telegram) }}</td>
                 <td>{{ cell(deal.plot) }}</td>
-                <td>{{ cell(deal.budget) }}</td>
+                <td>{{ deal.tk_cost_fmt or '—' }}</td>
                 <td>{{ cell(deal.area) }}</td>
                 <td>{{ cell(deal.material) }}</td>
                 <td>{{ cell(deal.timeline) }}</td>

@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>{{ title }} — {{ company_name }}</title>
+  <style>
+    @font-face {
+      font-family: "DejaVu Sans";
+      src: url("{{ font_regular }}");
+      font-weight: 400;
+    }
+    @font-face {
+      font-family: "DejaVu Sans";
+      src: url("{{ font_bold }}");
+      font-weight: 700;
+    }
+
+    @page {
+      size: A4;
+      margin: 14mm 16mm 16mm;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      color: #1a2332;
+      font-family: "DejaVu Sans", Arial, sans-serif;
+      font-size: 9.5pt;
+      line-height: 1.45;
+      background: #fff;
+    }
+
+    @media screen {
+      body {
+        background: #c5cbc8;
+        padding: 24px 12px 40px;
+      }
+      .page {
+        position: relative;
+        width: 210mm;
+        min-height: 297mm;
+        margin: 0 auto 24px;
+        padding: 14mm 16mm 16mm;
+        background: #fff;
+        box-shadow: 0 12px 40px rgba(0,0,0,.22);
+        overflow: hidden;
+      }
+    }
+
+    .page { position: relative; overflow: hidden; }
+
+    .watermark {
+      position: fixed;
+      top: 42%;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(-28deg);
+      font-size: 54pt;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      color: {% if watermark == 'approved' %}rgba(26, 77, 62, 0.10){% else %}rgba(160, 40, 40, 0.11){% endif %};
+      white-space: nowrap;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    .content { position: relative; z-index: 1; }
+
+    .header {
+      display: table;
+      width: 100%;
+      border-bottom: 3px solid {{ accent }};
+      padding-bottom: 10px;
+      margin-bottom: 12px;
+    }
+
+    .header-left, .header-right {
+      display: table-cell;
+      vertical-align: bottom;
+    }
+
+    .header-right { text-align: right; color: #5a6577; font-size: 8.5pt; }
+
+    .company {
+      color: {{ accent }};
+      font-size: 16pt;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+
+    .company-sub {
+      color: #5a6577;
+      font-size: 8pt;
+      margin-top: 2px;
+    }
+
+    .doc-type {
+      font-size: 8.5pt;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #5a6577;
+      margin-top: 4px;
+    }
+
+    h1 {
+      margin: 10px 0 6px;
+      font-size: 15pt;
+      color: {{ accent }};
+      line-height: 1.25;
+    }
+
+    .badge {
+      display: inline-block;
+      background: {{ accent_soft }};
+      color: {{ accent }};
+      border: 1px solid {{ accent }};
+      border-radius: 4px;
+      padding: 3px 10px;
+      font-size: 8.5pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 8px;
+    }
+
+    .meta {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 12px;
+      font-size: 9pt;
+    }
+
+    .meta td { padding: 3px 8px 3px 0; vertical-align: top; }
+    .meta .lbl { color: #5a6577; width: 34%; }
+    .meta .val { font-weight: 700; }
+
+    .price-strip {
+      display: table;
+      width: 100%;
+      margin-bottom: 12px;
+      border: 1.5px solid {{ accent }};
+      border-radius: 6px;
+      background: {{ accent_soft }};
+      overflow: hidden;
+    }
+
+    .price-cell {
+      display: table-cell;
+      width: 33.33%;
+      padding: 10px 12px;
+      vertical-align: middle;
+      border-right: 1px solid rgba(26, 77, 62, 0.2);
+    }
+
+    .price-cell:last-child { border-right: none; }
+
+    .price-cell .lbl {
+      font-size: 7.5pt;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #5a6577;
+      margin-bottom: 2px;
+    }
+
+    .price-cell .val {
+      font-size: 12pt;
+      font-weight: 700;
+      color: {{ accent }};
+    }
+
+    .intro {
+      background: {{ accent_soft }};
+      border-left: 4px solid {{ accent }};
+      padding: 8px 10px;
+      margin-bottom: 12px;
+      font-size: 9pt;
+    }
+
+    h2 {
+      margin: 14px 0 6px;
+      font-size: 11pt;
+      color: {{ accent }};
+      border-bottom: 1px solid #d8dee8;
+      padding-bottom: 3px;
+    }
+
+    .section-text {
+      font-size: 9pt;
+      margin: 0 0 8px;
+    }
+
+    table.items {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 6px 0 8px;
+      font-size: 8.5pt;
+    }
+
+    table.items th {
+      background: {{ accent }};
+      color: #fff;
+      text-align: left;
+      padding: 6px 7px;
+      font-weight: 700;
+    }
+
+    table.items td {
+      border-bottom: 1px solid #e5e9ef;
+      padding: 6px 7px;
+      vertical-align: top;
+    }
+
+    .num { text-align: right; white-space: nowrap; }
+    .center { text-align: center; }
+
+    .total-box {
+      margin-top: 8px;
+      background: {{ accent_soft }};
+      border: 1.5px solid {{ accent }};
+      border-radius: 6px;
+      padding: 10px 12px;
+    }
+
+    .total-row { display: table; width: 100%; }
+    .total-label, .total-value { display: table-cell; vertical-align: middle; }
+    .total-label { font-size: 10pt; font-weight: 700; }
+    .total-value {
+      text-align: right;
+      font-size: 14pt;
+      font-weight: 700;
+      color: {{ accent }};
+    }
+    .total-note { margin-top: 4px; font-size: 8pt; color: #5a6577; }
+
+    .budget-note {
+      margin-top: 8px;
+      padding: 8px 10px;
+      border: 1px dashed {{ accent }};
+      background: #fff;
+      font-size: 8.5pt;
+    }
+
+    ul.compact { margin: 4px 0 8px; padding-left: 16px; }
+    ul.compact li { margin-bottom: 2px; }
+
+    .two-col { width: 100%; border-collapse: collapse; }
+    .two-col td {
+      width: 50%;
+      vertical-align: top;
+      padding-right: 10px;
+    }
+    .two-col td:last-child { padding-right: 0; padding-left: 10px; }
+
+    .box {
+      border: 1px solid #d8dee8;
+      background: #f7f9fb;
+      padding: 8px 10px;
+      font-size: 8.5pt;
+      min-height: 70px;
+    }
+    .box strong { color: {{ accent }}; }
+
+    .footer {
+      margin-top: 14px;
+      padding-top: 8px;
+      border-top: 1px solid #d8dee8;
+      font-size: 7.5pt;
+      color: #5a6577;
+    }
+
+    .sign {
+      margin-top: 16px;
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 9pt;
+    }
+    .sign td { width: 50%; padding-top: 18px; vertical-align: top; }
+    .sign .line {
+      border-top: 1px solid #9aa3b2;
+      margin-top: 28px;
+      padding-top: 4px;
+      color: #5a6577;
+      font-size: 8pt;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="watermark">{{ watermark_label }}</div>
+    <div class="content">
+      <div class="header">
+        <div class="header-left">
+          <div class="company">«{{ company_name }}»</div>
+          <div class="company-sub">Частные дома из газобетона · Московская область · от 100 м²</div>
+          <div class="doc-type">Коммерческое предложение</div>
+        </div>
+        <div class="header-right">
+          № {{ kp_number }} от {{ date }}<br/>
+          Действительно до: {{ valid_until }}
+        </div>
+      </div>
+
+      <div class="badge">{{ variant_label }}</div>
+      <h1>{{ title }}</h1>
+
+      <table class="meta">
+        <tr><td class="lbl">Заказчик</td><td class="val">{{ client_name }}</td></tr>
+        <tr><td class="lbl">Объект</td><td class="val">{{ object_desc }}</td></tr>
+        <tr><td class="lbl">Площадь</td><td class="val">{{ area }}{% if area_note %} · {{ area_note }}{% endif %}</td></tr>
+        <tr><td class="lbl">Участок</td><td class="val">{{ plot }}</td></tr>
+        <tr><td class="lbl">Менеджер</td><td class="val">{{ manager }}</td></tr>
+      </table>
+
+      <div class="price-strip">
+        <div class="price-cell">
+          <div class="lbl">Площадь</div>
+          <div class="val">{{ area_m2 }} м²</div>
+        </div>
+        <div class="price-cell">
+          <div class="lbl">Цена тёплого контура</div>
+          <div class="val">{{ price_per_m2_fmt }} ₽/м²</div>
+        </div>
+        <div class="price-cell">
+          <div class="lbl">Итого</div>
+          <div class="val">{{ total_fmt }}</div>
+        </div>
+      </div>
+
+      <div class="intro">{{ intro }}</div>
+
+      <h2>1. Расчёт стоимости</h2>
+      <table class="items">
+        <thead>
+          <tr>
+            <th style="width:6%">№</th>
+            <th style="width:44%">Наименование</th>
+            <th style="width:28%">Состав / характеристика</th>
+            <th style="width:22%" class="num">Стоимость, ₽</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in items %}
+          <tr>
+            <td class="center">{{ loop.index }}</td>
+            <td><strong>{{ item.name }}</strong></td>
+            <td>{{ item.detail }}</td>
+            <td class="num">{{ item.price_fmt }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <div class="total-box">
+        <div class="total-row">
+          <div class="total-label">{{ total_label }}</div>
+          <div class="total-value">{{ total_fmt }}</div>
+        </div>
+        <div class="total-note">{{ total_note }}</div>
+      </div>
+
+      {% if budget_note %}
+      <div class="budget-note"><strong>Сопоставление с бюджетом:</strong> {{ budget_note }}</div>
+      {% endif %}
+
+      <h2>2. Архитектурное описание</h2>
+      <p class="section-text">{{ architecture }}</p>
+
+      <h2>3. Инженерные решения</h2>
+      <p class="section-text">{{ engineering }}</p>
+
+      <h2>4. Технические характеристики</h2>
+      <p class="section-text">{{ specs }}</p>
+
+      <h2>5. Коммерческие условия</h2>
+      <p class="section-text">{{ commercial }}</p>
+
+      <h2>6. Что входит / не входит</h2>
+      <table class="two-col">
+        <tr>
+          <td>
+            <div class="box">
+              <strong>Входит в тёплый контур:</strong>
+              <ul class="compact">
+                {% for x in included %}<li>{{ x }}</li>{% endfor %}
+              </ul>
+            </div>
+          </td>
+          <td>
+            <div class="box">
+              <strong>Не входит (отдельно):</strong>
+              <ul class="compact">
+                {% for x in excluded %}<li>{{ x }}</li>{% endfor %}
+              </ul>
+            </div>
+          </td>
+        </tr>
+      </table>
+
+      <h2>7. Сроки и условия</h2>
+      <ul class="compact">
+        {% for x in terms %}<li>{{ x }}</li>{% endfor %}
+      </ul>
+
+      <h2>8. Гарантии</h2>
+      <ul class="compact">
+        {% for x in warranty %}<li>{{ x }}</li>{% endfor %}
+      </ul>
+
+      <h2>9. Следующий шаг</h2>
+      <div class="box">{{ next_step }}</div>
+
+      <table class="sign">
+        <tr>
+          <td>
+            От «{{ company_name }}»<br/>
+            <div class="line">{{ manager }} / подпись</div>
+          </td>
+          <td>
+            С предложением ознакомлен<br/>
+            <div class="line">{{ client_name }} / подпись</div>
+          </td>
+        </tr>
+      </table>
+
+      <div class="footer">
+        КП сформировано для этапа «Стройка». Ставка {{ price_per_m2_fmt }} ₽/м² — корпоративный ориентир
+        «{{ company_name }}» на тёплый контур в Московской области.
+        Итоговая смета уточняется после выбора проекта и выезда на участок.
+        {% if watermark == 'draft' %}Документ является черновиком до утверждения менеджером.{% endif %}
+      </div>
+    </div>
+  </div>
+</body>
+</html>

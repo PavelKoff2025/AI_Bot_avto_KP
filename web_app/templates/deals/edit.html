@@ -76,22 +76,28 @@
                            placeholder="например: 10 соток">
                 </div>
                 <div class="mb-3">
-                    <label class="form-label">Бюджет</label>
-                    <input type="text" name="budget" class="form-control"
-                           value="{{ deal.budget or '' }}"
-                           placeholder="например: 7–8 млн руб.">
-                </div>
-                <div class="mb-3">
                     <label class="form-label">Площадь дома (м²)</label>
                     <input type="text" name="area" class="form-control"
                            value="{{ deal.area or '' }}"
                            placeholder="например: 120–140 м²">
                 </div>
                 <div class="mb-3">
+                    <label class="form-label">Стоимость ТК (авто)</label>
+                    <input type="text" class="form-control" disabled
+                           value="{{ deal.tk_cost_fmt or 'будет рассчитана из площади × 41 000 ₽/м²' }}">
+                    <div class="form-text">Ориентир по стандарту «Дом-Мастер»: площадь × 41&nbsp;000&nbsp;₽/м²</div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Бюджет клиента <span class="text-muted">(необязательно)</span></label>
+                    <input type="text" name="budget" class="form-control"
+                           value="{{ deal.budget or '' }}"
+                           placeholder="если клиент назвал — зафиксируйте">
+                </div>
+                <div class="mb-3">
                     <label class="form-label">Материал стен</label>
                     <input type="text" name="material" class="form-control"
                            value="{{ deal.material or '' }}"
-                           placeholder="газобетон / кирпич / брус">
+                           placeholder="газобетон (стандарт)">
                 </div>
                 <div class="mb-3">
                     <label class="form-label">Сроки строительства</label>

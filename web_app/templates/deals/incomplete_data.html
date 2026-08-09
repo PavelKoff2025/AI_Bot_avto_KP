@@ -165,10 +165,11 @@ function copyScript() {
 }
 
 function generateKP() {
-    if (!confirm('Запустить генерацию КП?')) return;
+    if (!confirm('Сгенерировать КП тёплого контура (41 000 ₽/м²)?')) return;
     fetch('{{ url_for("deals.generate_kp", deal_id=deal.id) }}', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ watermark: 'draft', use_ai: true })
     })
     .then(async (response) => {
         const data = await response.json();
@@ -177,7 +178,8 @@ function generateKP() {
             if (data.redirect) window.location = data.redirect;
             return;
         }
-        alert(data.message || 'Генерация запущена!');
+        alert(data.message || 'КП готово');
+        window.location = '{{ url_for("deals.deal_detail", deal_id=deal.id) }}';
     })
     .catch((error) => alert('Ошибка: ' + error));
 }

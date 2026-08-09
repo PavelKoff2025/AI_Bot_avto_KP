@@ -144,6 +144,29 @@ else
     "${ROOT}/web_app/" \
     "${REMOTE}:${REMOTE_PATH}/web_app/"
 
+  # КП «Стройка»: генератор, шаблоны PDF, шрифты WeasyPrint
+  rsync -az \
+    -e "$RSYNC_SSH" \
+    --exclude '__pycache__/' \
+    --exclude '*.pyc' \
+    --exclude '.DS_Store' \
+    "${ROOT}/utils/" \
+    "${REMOTE}:${REMOTE_PATH}/utils/"
+
+  rsync -az \
+    -e "$RSYNC_SSH" \
+    --exclude '.DS_Store' \
+    "${ROOT}/templates/" \
+    "${REMOTE}:${REMOTE_PATH}/templates/"
+
+  if [[ -d "${ROOT}/fonts" ]]; then
+    rsync -az \
+      -e "$RSYNC_SSH" \
+      --exclude '.DS_Store' \
+      "${ROOT}/fonts/" \
+      "${REMOTE}:${REMOTE_PATH}/fonts/"
+  fi
+
   # Эталон и ключевые утилиты (если нужны на сервере рядом с CRM)
   rsync -az \
     -e "$RSYNC_SSH" \
@@ -170,15 +193,25 @@ fi
 echo "Останавливаем старый процесс..."
 pkill -f 'python3 .*web_app/app.py' 2>/dev/null || true
 pkill -f 'python3 app.py' 2>/dev/null || true
+# Waitress остаётся тем же python3 app.py — даём порту освободиться
+sleep 2
+fuser -k 5001/tcp 2>/dev/null || true
 sleep 1
 
-# Зависимости web_app (тихо, если уже стоят)
+# Зависимости CRM + КП (тихо, если уже стоят)
 if command -v pip3 >/dev/null 2>&1; then
-  pip3 install -q flask werkzeug python-docx PyPDF2 2>/dev/null || true
+  pip3 install -q flask werkzeug python-docx PyPDF2 jinja2 weasyprint openai python-dotenv waitress 2>/dev/null || true
+fi
+
+# .env с OPENAI_API_KEY: корень репо или web_app
+if [[ -f .env && ! -f web_app/.env ]]; then
+  ln -sfn ../.env web_app/.env 2>/dev/null || cp -n .env web_app/.env 2>/dev/null || true
 fi
 
 echo "Запуск web_app/app.py..."
 cd web_app
+# reports/kp рядом с репо (PROJECT_ROOT)
+mkdir -p ../reports/kp/stroika
 nohup python3 app.py > ../logs/app.log 2>&1 &
 sleep 2
 

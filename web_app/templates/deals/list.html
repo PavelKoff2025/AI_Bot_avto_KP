@@ -117,7 +117,7 @@
                         <th style="min-width: 150px;">Email</th>
                         <th style="min-width: 80px;">Telegram</th>
                         <th style="min-width: 100px;">Участок</th>
-                        <th style="min-width: 100px;">Бюджет</th>
+                        <th style="min-width: 120px;">Стоимость ТК</th>
                         <th style="min-width: 100px;">Площадь</th>
                         <th style="min-width: 100px;">Материал</th>
                         <th style="min-width: 100px;">Сроки</th>
@@ -147,7 +147,13 @@
                             {% endif %}
                         </td>
                         <td>{{ cell(deal.plot) }}</td>
-                        <td>{{ cell(deal.budget) }}</td>
+                        <td>
+                            {% if deal.tk_cost_fmt %}
+                                <strong>{{ deal.tk_cost_fmt }}</strong>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
                         <td>{{ cell(deal.area) }}</td>
                         <td>{{ cell(deal.material) }}</td>
                         <td>{{ cell(deal.timeline) }}</td>
@@ -317,12 +323,13 @@
 {% block scripts %}
 <script>
 function generateKP(dealId) {
-    if (!confirm('Сгенерировать коммерческое предложение для сделки #' + dealId + '?')) {
+    if (!confirm('Сгенерировать КП тёплого контура (41 000 ₽/м²) для сделки #' + dealId + '?')) {
         return;
     }
     fetch('/deals/' + dealId + '/generate-kp', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ watermark: 'draft', use_ai: true })
     })
     .then(async (response) => {
         const data = await response.json();
@@ -331,7 +338,8 @@ function generateKP(dealId) {
             if (data.redirect) window.location = data.redirect;
             return;
         }
-        alert(data.message || 'КП запущено');
+        alert(data.message || 'КП готово');
+        window.location = '/deals/' + dealId;
     })
     .catch((error) => alert('Ошибка: ' + error));
 }

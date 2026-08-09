@@ -1,8 +1,20 @@
 import os
+import sys
 import json
 import sqlite3
 import logging
-from flask import Blueprint, render_template, request, redirect, url_for, session, jsonify, flash
+from pathlib import Path
+from flask import (
+    Blueprint,
+    render_template,
+    request,
+    redirect,
+    url_for,
+    session,
+    jsonify,
+    flash,
+    send_file,
+)
 from functools import wraps
 from werkzeug.utils import secure_filename
 from file_parser import extract_text_from_file
@@ -10,11 +22,41 @@ from transcript_parser_local import parse_transcript_local as parse_transcript
 from transcript_parser_local import validate_against_etalon
 from etalon_score import etalon_match_score, KP_THRESHOLD, ETALON_FIELDS, FIELD_QUESTIONS
 from db_utils import connect_db
+from pricing import apply_tk_cost, calc_tk_cost
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 deals_bp = Blueprint('deals', __name__, url_prefix='/deals')
+
+
+def _parse_kp_options(raw) -> dict | None:
+    if not raw:
+        return None
+    if isinstance(raw, dict):
+        return raw
+    try:
+        data = json.loads(raw)
+        return data if isinstance(data, dict) else None
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+
+
+def _safe_kp_pdf_path(pdf_path: str | Path) -> Path | None:
+    """Разрешает путь к PDF только внутри reports/kp."""
+    try:
+        path = Path(pdf_path).resolve()
+        allowed = (PROJECT_ROOT / "reports" / "kp").resolve()
+        path.relative_to(allowed)
+    except (OSError, ValueError, TypeError):
+        return None
+    if not path.is_file() or path.suffix.lower() != ".pdf":
+        return None
+    return path
 
 def login_required(f):
     @wraps(f)
@@ -37,6 +79,7 @@ def _deal_with_etalon(row: sqlite3.Row) -> dict:
     deal["can_generate_kp"] = match["can_generate_kp"]
     deal["is_complete"] = match["is_complete"]
     deal["etalon_threshold"] = match["threshold"]
+    apply_tk_cost(deal)
     return deal
 
 @deals_bp.route('/')
@@ -185,11 +228,12 @@ def new_deal():
         client_email = parsed_data.get('client_email')
         client_telegram = parsed_data.get('client_telegram')
         plot = parsed_data.get('plot')
-        budget = parsed_data.get('budget')
+        budget = parsed_data.get('budget')  # необязательно (если клиент назвал)
         area = parsed_data.get('area')
         material = parsed_data.get('material')
         timeline = parsed_data.get('timeline')
         funding_source = parsed_data.get('funding_source')
+        tk_cost = calc_tk_cost(area)
 
         conn = get_db()
         cursor = conn.cursor()
@@ -197,12 +241,12 @@ def new_deal():
             INSERT INTO deals (
                 client_name, client_phone, client_email, client_telegram,
                 transcript, notes, user_id, status,
-                plot, budget, area, material, timeline, funding_source
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                plot, budget, area, material, timeline, funding_source, tk_cost
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             client_name, client_phone, client_email, client_telegram,
             transcript, notes, session['user_id'], 'new',
-            plot, budget, area, material, timeline, funding_source
+            plot, budget, area, material, timeline, funding_source, tk_cost
         ))
         deal_id = cursor.lastrowid
         conn.commit()
@@ -274,12 +318,28 @@ def deal_detail(deal_id):
             text = ''
         field_rows.append({'key': key, 'label': label, 'value': text or None})
 
+    # Автополе по стандарту компании (не входит в % эталона)
+    field_rows.append({
+        'key': 'tk_cost',
+        'label': 'Стоимость ТК',
+        'value': deal.get('tk_cost_fmt') or None,
+    })
+    if deal.get('budget'):
+        field_rows.append({
+            'key': 'budget',
+            'label': 'Бюджет клиента (необяз.)',
+            'value': deal.get('budget'),
+        })
+
+    kp_meta = _parse_kp_options(deal.get('kp_options'))
+
     return render_template(
         'deals/view.html',
         deal=deal,
         data=data,
         field_rows=field_rows,
         kp_threshold=KP_THRESHOLD,
+        kp_meta=kp_meta,
     )
 
 @deals_bp.route('/<int:deal_id>/incomplete')
@@ -318,11 +378,13 @@ def incomplete_data(deal_id):
 def edit_deal(deal_id):
     """Редактирование сделки со всеми полями эталона."""
     conn = get_db()
-    deal = conn.execute('SELECT * FROM deals WHERE id = ?', (deal_id,)).fetchone()
+    row = conn.execute('SELECT * FROM deals WHERE id = ?', (deal_id,)).fetchone()
     conn.close()
-    if not deal:
+    if not row:
         flash('Сделка не найдена', 'error')
         return redirect(url_for('deals.list_deals'))
+
+    deal = _deal_with_etalon(row)
 
     if request.method == 'POST':
         # Основные поля
@@ -381,19 +443,22 @@ def edit_deal(deal_id):
                 flash(f'Ошибка обновления данных транскрибации: {e}', 'warning')
 
         try:
+            tk_cost = calc_tk_cost(area)
             conn = get_db()
             conn.execute(
                 '''
                 UPDATE deals SET
                     client_name = ?, client_phone = ?, client_email = ?, client_telegram = ?,
                     transcript = ?, notes = ?, status = ?,
-                    plot = ?, budget = ?, area = ?, material = ?, timeline = ?, funding_source = ?
+                    plot = ?, budget = ?, area = ?, material = ?, timeline = ?, funding_source = ?,
+                    tk_cost = ?
                 WHERE id = ?
                 ''',
                 (
                     client_name, client_phone, client_email, client_telegram,
                     transcript, notes, status,
                     plot, budget, area, material, timeline, funding_source,
+                    tk_cost,
                     deal_id,
                 ),
             )
@@ -434,12 +499,14 @@ def edit_deal(deal_id):
 def generate_kp(deal_id):
     conn = get_db()
     row = conn.execute('SELECT * FROM deals WHERE id = ?', (deal_id,)).fetchone()
-    conn.close()
     if not row:
+        conn.close()
         return jsonify({'status': 'error', 'message': 'Сделка не найдена'}), 404
 
-    match = etalon_match_score(row)
+    deal = dict(row)
+    match = etalon_match_score(deal)
     if not match['can_generate_kp']:
+        conn.close()
         return jsonify({
             'status': 'error',
             'message': (
@@ -452,13 +519,96 @@ def generate_kp(deal_id):
             'redirect': url_for('deals.incomplete_data', deal_id=deal_id),
         }), 400
 
-    # Stub генерации — реальная сборка КП подключается отдельно
+    payload = request.get_json(silent=True) or {}
+    watermark = (payload.get('watermark') or request.args.get('watermark') or 'draft').strip()
+    if watermark not in ('draft', 'approved'):
+        watermark = 'draft'
+    use_ai = payload.get('use_ai', True)
+    if isinstance(use_ai, str):
+        use_ai = use_ai.lower() not in ('0', 'false', 'no')
+
+    manager_name = session.get('user_name') or session.get('username') or None
+
+    try:
+        from utils.stroika_kp import generate_stroika_kp_pdf, parse_area_m2, PRICE_PER_M2
+
+        if not parse_area_m2(deal.get('area')):
+            conn.close()
+            return jsonify({
+                'status': 'error',
+                'message': 'Укажите площадь дома (м²) в карточке сделки — без неё нельзя посчитать КП.',
+                'redirect': url_for('deals.edit_deal', deal_id=deal_id),
+            }), 400
+
+        meta = generate_stroika_kp_pdf(
+            deal,
+            watermark=watermark,
+            use_ai=bool(use_ai),
+            manager_name=manager_name,
+        )
+    except ValueError as exc:
+        conn.close()
+        return jsonify({'status': 'error', 'message': str(exc)}), 400
+    except Exception as exc:  # noqa: BLE001
+        conn.close()
+        logger.exception('Ошибка генерации КП для сделки %s', deal_id)
+        return jsonify({
+            'status': 'error',
+            'message': f'Не удалось сформировать КП: {exc}',
+        }), 500
+
+    conn.execute(
+        'UPDATE deals SET kp_options = ?, status = CASE WHEN status = ? THEN ? ELSE status END WHERE id = ?',
+        (json.dumps(meta, ensure_ascii=False), 'new', 'kp_ready', deal_id),
+    )
+    conn.commit()
+    conn.close()
+
     return jsonify({
         'status': 'success',
-        'message': f'Генерация КП запущена (заполнение {match["score"]}%)',
+        'message': (
+            f'КП готово: {meta["area_m2"]} м² × {PRICE_PER_M2:,} ₽/м² = {meta["total_fmt"]}'
+            .replace(',', ' ')
+        ),
         'deal_id': deal_id,
         'score': match['score'],
+        'kp': meta,
+        'download_url': url_for('deals.download_kp', deal_id=deal_id),
     })
+
+
+@deals_bp.route('/<int:deal_id>/kp.pdf')
+@login_required
+def download_kp(deal_id):
+    conn = get_db()
+    row = conn.execute('SELECT kp_options FROM deals WHERE id = ?', (deal_id,)).fetchone()
+    conn.close()
+    if not row:
+        flash('Сделка не найдена', 'error')
+        return redirect(url_for('deals.list_deals'))
+
+    meta = _parse_kp_options(row['kp_options'] if isinstance(row, sqlite3.Row) else row[0])
+    if not meta or not meta.get('pdf_path'):
+        flash('КП ещё не сгенерировано', 'warning')
+        return redirect(url_for('deals.deal_detail', deal_id=deal_id))
+
+    path = _safe_kp_pdf_path(meta['pdf_path'])
+    if not path:
+        flash('Файл КП не найден на диске', 'error')
+        return redirect(url_for('deals.deal_detail', deal_id=deal_id))
+
+    download_name = f"KP_DomMaster_deal{deal_id}.pdf"
+    response = send_file(
+        path,
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name=download_name,
+        conditional=True,
+        max_age=0,
+    )
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
 
 @deals_bp.route('/<int:deal_id>/status', methods=['POST'])
 @login_required

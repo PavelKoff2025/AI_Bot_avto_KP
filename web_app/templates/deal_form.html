@@ -77,19 +77,22 @@
 
         <div class="grid-2">
             <div>
-                <label>Бюджет</label>
-                <input type="text" name="budget" value="{{ deal.budget if deal else '' }}" placeholder="например: 7–8 млн руб.">
-            </div>
-            <div>
                 <label>Площадь</label>
                 <input type="text" name="area" value="{{ deal.area if deal else '' }}" placeholder="например: 120–140 м²">
             </div>
+            <div>
+                <label>Стоимость ТК (авто)</label>
+                <input type="text" value="{% if deal and deal.tk_cost_fmt %}{{ deal.tk_cost_fmt }}{% else %}считается из площади × 41 000 ₽/м²{% endif %}" disabled>
+            </div>
         </div>
+
+        <label>Бюджет клиента <span style="opacity:.7">(необязательно)</span></label>
+        <input type="text" name="budget" value="{{ deal.budget if deal else '' }}" placeholder="если клиент назвал бюджет — зафиксируйте">
 
         <div class="grid-2">
             <div>
                 <label>Материал стен</label>
-                <input type="text" name="material" value="{{ deal.material if deal else '' }}" placeholder="газобетон / кирпич / брус">
+                <input type="text" name="material" value="{{ deal.material if deal else '' }}" placeholder="газобетон (стандарт)">
             </div>
             <div>
                 <label>Сроки старта</label>

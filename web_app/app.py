@@ -10,6 +10,7 @@ from routes_deals import deals_bp
 from routes_admin import admin_bp
 from db_utils import connect_db
 from etalon_score import etalon_match_score
+from pricing import apply_tk_cost
 
 
 app = Flask(__name__)
@@ -96,6 +97,7 @@ def _deal_with_etalon(row: sqlite3.Row) -> dict:
     deal["etalon_score"] = match["score"]
     deal["etalon_grade"] = match["grade"]
     deal["etalon_missing"] = match["missing"]
+    apply_tk_cost(deal)
     return deal
 
 # === Декоратор для проверки авторизации ===
@@ -178,4 +180,11 @@ app.register_blueprint(admin_bp)
 
 if __name__ == '__main__':
     init_db()
-    app.run(host='0.0.0.0', port=5001, debug=False)
+    # Waitress стабильнее встроенного сервера Flask на VPS (меньше обрывов соединений).
+    try:
+        from waitress import serve
+
+        print('Starting Waitress on 0.0.0.0:5001')
+        serve(app, host='0.0.0.0', port=5001, threads=8, channel_timeout=120)
+    except ImportError:
+        app.run(host='0.0.0.0', port=5001, debug=False, threaded=True)

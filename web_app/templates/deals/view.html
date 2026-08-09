@@ -121,8 +121,14 @@
                         <i class="bi bi-check-circle-fill"></i>
                         Данных достаточно для генерации КП (≥ {{ kp_threshold }}%).
                     </div>
+                    <p class="small text-muted mb-3">
+                        Этап «Стройка»: одно КП на тёплый контур —
+                        <strong>{{ deal.area or 'площадь не указана' }}</strong>
+                        × 41&nbsp;000&nbsp;₽/м².
+                    </p>
                     <button class="btn btn-success btn-lg" type="button" onclick="generateKP({{ deal.id }})">
-                        <i class="bi bi-file-pdf"></i> Сгенерировать КП
+                        <i class="bi bi-file-pdf"></i>
+                        {% if kp_meta %}Пересобрать КП{% else %}Сгенерировать КП{% endif %}
                     </button>
                 {% else %}
                     <div class="alert alert-warning">
@@ -142,6 +148,56 @@
         </div>
     </div>
 </div>
+
+{% if kp_meta %}
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card shadow-sm border-success">
+            <div class="card-header bg-success-subtle d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <h5 class="mb-0"><i class="bi bi-file-earmark-pdf"></i> Коммерческое предложение</h5>
+                <span class="badge {% if kp_meta.watermark == 'approved' %}text-bg-success{% else %}text-bg-warning text-dark{% endif %}">
+                    {% if kp_meta.watermark == 'approved' %}Утверждено{% else %}Черновик{% endif %}
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="row g-3 align-items-center">
+                    <div class="col-md-8">
+                        <table class="table table-sm mb-0">
+                            <tr>
+                                <th style="width:40%">Номер</th>
+                                <td>{{ kp_meta.kp_number or '—' }}</td>
+                            </tr>
+                            <tr>
+                                <th>Площадь</th>
+                                <td>{{ kp_meta.area_m2 }} м²</td>
+                            </tr>
+                            <tr>
+                                <th>Ставка</th>
+                                <td>{{ '{:,}'.format(kp_meta.price_per_m2).replace(',', ' ') }} ₽/м²</td>
+                            </tr>
+                            <tr>
+                                <th>Итого тёплый контур</th>
+                                <td><strong>{{ kp_meta.total_fmt }}</strong></td>
+                            </tr>
+                            <tr>
+                                <th>Сформировано</th>
+                                <td>{{ kp_meta.generated_at or '—' }}{% if kp_meta.ai_used %} · тексты OpenAI{% endif %}</td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div class="col-md-4 text-md-end">
+                        <button class="btn btn-success btn-lg" type="button" id="btnDownloadKp"
+                                onclick="downloadKpPdf({{ deal.id }})">
+                            <i class="bi bi-download"></i> Скачать PDF
+                        </button>
+                        <div class="small text-muted mt-2">Файл останется на этой странице — без перехода по ссылке.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <div class="row mt-4">
     <div class="col-12">
@@ -237,24 +293,71 @@
 
 {% block scripts %}
 <script>
+function downloadKpPdf(dealId) {
+    const btn = document.getElementById('btnDownloadKp');
+    const prev = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Скачивание…';
+    }
+    fetch('/deals/' + dealId + '/kp.pdf', { credentials: 'same-origin' })
+        .then(async (response) => {
+            if (!response.ok) {
+                throw new Error('Сервер вернул ' + response.status);
+            }
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'KP_DomMaster_deal' + dealId + '.pdf';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        })
+        .catch((error) => {
+            alert(
+                'Не удалось скачать PDF: ' + error +
+                '\n\nЧасто это краткий обрыв связи с сервером. Обновите страницу и нажмите ещё раз.'
+            );
+        })
+        .finally(() => {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = prev || '<i class="bi bi-download"></i> Скачать PDF';
+            }
+        });
+}
+
 function generateKP(dealId) {
-    if (!confirm('Сгенерировать коммерческое предложение для сделки #' + dealId + '?')) {
+    if (!confirm('Сгенерировать КП тёплого контура (41 000 ₽/м²) для сделки #' + dealId + '?')) {
         return;
+    }
+    const btn = event && event.target ? event.target.closest('button') : null;
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Генерация…';
     }
     fetch('/deals/' + dealId + '/generate-kp', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ watermark: 'draft', use_ai: true })
     })
     .then(async (response) => {
         const data = await response.json();
         if (!response.ok || data.status === 'error') {
             alert('Ошибка: ' + (data.message || 'недостаточно данных'));
             if (data.redirect) window.location = data.redirect;
+            else if (btn) location.reload();
             return;
         }
-        alert(data.message || 'КП запущено');
+        alert(data.message || 'КП готово');
+        window.location.reload();
     })
-    .catch((error) => alert('Ошибка: ' + error));
+    .catch((error) => {
+        alert('Ошибка: ' + error);
+        if (btn) location.reload();
+    });
 }
 
 function updateStatus(status) {

@@ -64,13 +64,16 @@ def insert_deal(
     user_id: int | None,
 ) -> int:
     notes = f"[demo] {title}"
+    from pricing import calc_tk_cost
+
+    area = parsed.get("area") or None
     cursor = conn.execute(
         """
         INSERT INTO deals (
             client_name, client_phone, client_email, client_telegram,
             transcript, notes, user_id, status,
-            plot, budget, area, material, timeline, funding_source
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            plot, budget, area, material, timeline, funding_source, tk_cost
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             parsed.get("client_name") or parsed.get("name") or "Тестовый клиент",
@@ -83,10 +86,11 @@ def insert_deal(
             "new",
             parsed.get("plot") or parsed.get("plot_size") or None,
             parsed.get("budget") or None,
-            parsed.get("area") or None,
+            area,
             parsed.get("material") or None,
             parsed.get("timeline") or parsed.get("deadline") or None,
             parsed.get("funding_source") or parsed.get("financing") or None,
+            calc_tk_cost(area),
         ),
     )
     conn.commit()

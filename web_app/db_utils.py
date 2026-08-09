@@ -11,6 +11,7 @@ DEAL_EXTRA_COLUMNS: tuple[tuple[str, str], ...] = (
     ("timeline", "TEXT"),
     ("funding_source", "TEXT"),
     ("plot", "TEXT"),
+    ("tk_cost", "INTEGER"),  # ориентировочная стоимость тёплого контура, ₽
 )
 
 
@@ -20,6 +21,21 @@ def ensure_deal_columns(conn: sqlite3.Connection) -> None:
         if name not in existing:
             conn.execute(f"ALTER TABLE deals ADD COLUMN {name} {col_type}")
     conn.commit()
+
+    # Пересчёт Стоимости ТК по площади (стандарт 41 000 ₽/м²)
+    try:
+        from pricing import calc_tk_cost
+
+        rows = conn.execute("SELECT id, area, tk_cost FROM deals").fetchall()
+        for row in rows:
+            cost = calc_tk_cost(row[1] if not isinstance(row, sqlite3.Row) else row["area"])
+            deal_id = row[0] if not isinstance(row, sqlite3.Row) else row["id"]
+            current = row[2] if not isinstance(row, sqlite3.Row) else row["tk_cost"]
+            if cost is not None and current != cost:
+                conn.execute("UPDATE deals SET tk_cost = ? WHERE id = ?", (cost, deal_id))
+        conn.commit()
+    except Exception:
+        pass
 
 
 def connect_db(path: str = "deals.db") -> sqlite3.Connection:
