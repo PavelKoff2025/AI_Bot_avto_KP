@@ -1,10 +1,18 @@
 import os
 import json
 import sqlite3
+from pathlib import Path
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 from functools import wraps
 from datetime import datetime
 import hashlib
+
+from dotenv import load_dotenv
+
+# Подхватываем .env из корня репо и web_app/ (на VPS web_app/.env → ../.env)
+_WEB_DIR = Path(__file__).resolve().parent
+load_dotenv(_WEB_DIR.parent / '.env')
+load_dotenv(_WEB_DIR / '.env')
 
 from routes_deals import deals_bp
 from routes_admin import admin_bp

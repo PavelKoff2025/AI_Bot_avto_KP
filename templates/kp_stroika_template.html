@@ -375,7 +375,35 @@
       <h2>5. Коммерческие условия</h2>
       <p class="section-text">{{ commercial }}</p>
 
-      <h2>6. Что входит / не входит</h2>
+      <h2>6. Уровни комплектаций (справка)</h2>
+      <p class="section-text" style="margin-bottom:8px;">
+        Ориентир для дома {{ complectations_base_area }}&nbsp;м², {{ company_name }}, Московская область.
+        Предмет этого КП — <strong>тёплый контур</strong> по формуле ниже.
+      </p>
+      <table class="items">
+        <thead>
+          <tr>
+            <th style="width:55%">Комплектация</th>
+            <th style="width:45%" class="num">Стоимость</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in complectations_table %}
+          <tr>
+            <td><strong>{{ row.name }}</strong></td>
+            <td class="num">{{ row.price }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <div class="budget-note" style="margin-top:8px;">
+        <strong>Формула ТК:</strong> {{ complectations_formula }}
+      </div>
+      <ul class="compact" style="margin-top:8px;">
+        {% for note in complectations_notes %}<li>{{ note }}</li>{% endfor %}
+      </ul>
+
+      <h2>7. Что входит / не входит</h2>
       <table class="two-col">
         <tr>
           <td>
@@ -397,17 +425,17 @@
         </tr>
       </table>
 
-      <h2>7. Сроки и условия</h2>
+      <h2>8. Сроки и условия</h2>
       <ul class="compact">
         {% for x in terms %}<li>{{ x }}</li>{% endfor %}
       </ul>
 
-      <h2>8. Гарантии</h2>
+      <h2>9. Гарантии</h2>
       <ul class="compact">
         {% for x in warranty %}<li>{{ x }}</li>{% endfor %}
       </ul>
 
-      <h2>9. Следующий шаг</h2>
+      <h2>10. Следующий шаг</h2>
       <div class="box">{{ next_step }}</div>
 
       <table class="sign">

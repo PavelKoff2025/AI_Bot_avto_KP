@@ -8,7 +8,7 @@ import zipfile
 from pathlib import Path
 
 from aiogram import Bot, Dispatcher, F
-from aiogram.filters import Command, CommandStart
+from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -52,26 +52,43 @@ def _lock_for(user_id: int | None) -> asyncio.Lock:
     return _user_locks[uid]
 
 
-def _is_allowed(user_id: int | None) -> bool:
+def _is_manager(user_id: int | None) -> bool:
+    """Менеджерский функционал (транскрибации) — только TELEGRAM_ALLOWED_IDS."""
     allowed = telegram_allowed_ids()
     if not allowed:
-        return True
+        return False
     return bool(user_id and user_id in allowed)
+
+
+def _is_allowed(user_id: int | None) -> bool:
+    """Совместимость: доступ к менеджерским хендлерам."""
+    return _is_manager(user_id)
+
+
+CLIENT_HELLO = (
+    "Здравствуйте! Это бот «Дом Мастер» для получения коммерческого предложения.\n\n"
+    "Чтобы привязать Telegram к сделке, откройте персональную ссылку от менеджера "
+    "(вид <code>t.me/…?start=deal_N</code>) и нажмите «Старт».\n\n"
+    "После привязки КП придёт сюда автоматически.\n"
+    "Ваш ID: команда /myid"
+)
 
 
 async def _deny_if_forbidden(message_or_cb: Message | CallbackQuery) -> bool:
     """True = доступ запрещён (уже ответили пользователю)."""
     user = message_or_cb.from_user
     uid = user.id if user else None
-    if _is_allowed(uid):
+    if _is_manager(uid):
         return False
     logger.warning("[%s] отказ: пользователь не в TELEGRAM_ALLOWED_IDS", _user_tag(message_or_cb))
-    text = "⛔ Доступ ограничен. Обратитесь к администратору бота."
+    text = CLIENT_HELLO
     try:
         if isinstance(message_or_cb, CallbackQuery):
-            await message_or_cb.answer(text, show_alert=True)
+            await message_or_cb.answer("Доступ только по ссылке из CRM", show_alert=True)
+            if message_or_cb.message:
+                await message_or_cb.message.answer(text, parse_mode="HTML")
         else:
-            await message_or_cb.answer(text)
+            await message_or_cb.answer(text, parse_mode="HTML")
     except Exception:  # noqa: BLE001
         logger.exception("Не удалось отправить отказ в доступе")
     return True
@@ -206,17 +223,119 @@ async def notify_error(target: Message | CallbackQuery, text: str) -> None:
         logger.exception("Не удалось отправить сообщение об ошибке пользователю")
 
 
-async def cmd_start(message: Message, state: FSMContext) -> None:
-    if await _deny_if_forbidden(message):
+async def cmd_start(message: Message, state: FSMContext, command: CommandObject) -> None:
+    """
+    /start — менеджер (только TELEGRAM_ALLOWED_IDS).
+    /start deal_123 — клиент привязывает chat_id к сделке (без allowlist).
+    Обычный /start у клиента — короткое клиентское приветствие (не промпт про .txt).
+    """
+    args = (command.args or "").strip()
+    if args.lower().startswith("deal_"):
+        await _bind_client_from_start(message, args)
         return
-    logger.info("[%s] /start — новая сессия", _user_tag(message))
+
+    user = message.from_user
+    if not _is_manager(user.id if user else None):
+        logger.info("[%s] /start — клиентское приветствие", _user_tag(message))
+        await state.clear()
+        await message.answer(CLIENT_HELLO, parse_mode="HTML")
+        return
+
+    logger.info("[%s] /start — новая сессия менеджера", _user_tag(message))
     await state.clear()
     await state.set_state(Flow.waiting_transcription)
     await message.answer(
         "Привет! Я помощник менеджера ОП «Дом-Мастер».\n\n"
         "Пришлите <b>.txt</b> с транскрибацией звонка (документом) "
         "или вставьте текст сообщением.\n\n"
-        "Я сверю данные с эталоном и скажу, хватает ли информации для КП.",
+        "Я сверю данные с эталоном и скажу, хватает ли информации для КП.\n\n"
+        "Клиенту для привязки сделки отправьте ссылку из CRM "
+        "(кнопка «Привязать Telegram»).",
+        parse_mode="HTML",
+    )
+
+
+async def _bind_client_from_start(message: Message, args: str) -> None:
+    """Deep-link start=deal_<id> — сохраняет chat_id в deals.telegram_chat_id."""
+    from utils.crm_telegram import bind_telegram_to_deal, bind_telegram_via_crm_api
+
+    raw_id = args.split("_", 1)[-1].strip()
+    if not raw_id.isdigit():
+        await message.answer(
+            "Некорректная ссылка привязки. Попросите менеджера прислать новую из CRM."
+        )
+        return
+    deal_id = int(raw_id)
+    user = message.from_user
+    if not user:
+        await message.answer("Не удалось определить ваш Telegram ID.")
+        return
+
+    info = None
+    errors: list[str] = []
+    crm_url = os.getenv("CRM_PUBLIC_URL", "").strip()
+
+    # При CRM_PUBLIC_URL — пишем в прод-CRM (бот может крутиться локально)
+    if crm_url:
+        try:
+            remote = bind_telegram_via_crm_api(
+                deal_id,
+                chat_id=user.id,
+                username=user.username,
+            )
+            info = {
+                "deal_id": deal_id,
+                "client_name": remote.get("client_name") or "Клиент",
+                "chat_id": str(user.id),
+                "username": user.username,
+            }
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"crm: {exc}")
+            logger.warning("remote bind deal_%s failed: %s", deal_id, exc)
+    else:
+        try:
+            info = bind_telegram_to_deal(
+                deal_id,
+                chat_id=user.id,
+                username=user.username,
+            )
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"local: {exc}")
+            logger.warning("local bind deal_%s failed: %s", deal_id, exc)
+
+    if not info:
+        logger.error("bind deal_%s failed for %s: %s", deal_id, _user_tag(message), errors)
+        await message.answer(
+            "Не удалось привязать Telegram к сделке.\n"
+            "Напишите менеджеру свой ID из /myid или попробуйте ссылку позже."
+        )
+        return
+
+    logger.info(
+        "[%s] привязан к сделке #%s (%s)",
+        _user_tag(message),
+        deal_id,
+        info.get("client_name"),
+    )
+    await message.answer(
+        f"✅ Готово!\n\n"
+        f"Ваш Telegram привязан к сделке <b>№{deal_id}</b> "
+        f"({info.get('client_name')}).\n"
+        f"ID: <code>{user.id}</code>\n\n"
+        f"Менеджер «Дом-Мастер» сможет отправить вам коммерческое предложение сюда.",
+        parse_mode="HTML",
+    )
+
+
+async def cmd_myid(message: Message) -> None:
+    """Любой пользователь может узнать свой chat_id."""
+    user = message.from_user
+    if not user:
+        return
+    uname = f"@{user.username}" if user.username else "—"
+    await message.answer(
+        f"Ваш Telegram ID: <code>{user.id}</code>\nUsername: {uname}\n\n"
+        f"Передайте ID менеджеру или откройте персональную ссылку привязки из CRM.",
         parse_mode="HTML",
     )
 
@@ -227,7 +346,10 @@ async def cmd_help(message: Message) -> None:
     logger.info("[%s] /help", _user_tag(message))
     await message.answer(
         "/start — начать заново\n"
-        "/help — справка\n\n"
+        "/help — справка\n"
+        "/myid — показать ваш Telegram ID\n\n"
+        "Клиент: откройте ссылку из CRM вида t.me/…?start=deal_N — "
+        "так привяжется chat_id для отправки КП.\n\n"
         "Варианты КП:\n"
         "• Базовый — газобетон\n"
         "• Средний + — газобетон усиленный\n"
@@ -729,6 +851,7 @@ def build_dispatcher() -> Dispatcher:
     dp.errors.register(on_global_error)
     dp.message.register(cmd_start, CommandStart())
     dp.message.register(cmd_help, Command("help"))
+    dp.message.register(cmd_myid, Command("myid"))
     dp.message.register(
         handle_transcription,
         Flow.waiting_transcription,
@@ -752,15 +875,20 @@ async def main() -> None:
 
     allowed = telegram_allowed_ids()
     if allowed:
-        logger.info("Allowlist Telegram: %s id(s)", len(allowed))
+        logger.info("Allowlist Telegram (менеджеры): %s id(s)", len(allowed))
     else:
         logger.warning(
-            "TELEGRAM_ALLOWED_IDS не задан — бот доступен любому пользователю. "
-            "Рекомендуется указать id через запятую в .env"
+            "TELEGRAM_ALLOWED_IDS пуст — менеджерский режим выключен. "
+            "Клиенты видят короткое приветствие; укажите id менеджеров в .env"
         )
 
     bot = Bot(token=token)
     dp = build_dispatcher()
+    if os.getenv("CRM_PUBLIC_URL", "").strip():
+        from utils.telegram_outbox import outbox_loop
+
+        asyncio.create_task(outbox_loop(bot))
+        logger.info("CRM_PUBLIC_URL=%s — remote bind + outbox worker", os.getenv("CRM_PUBLIC_URL"))
     logger.info("Бот запущен (polling). Логи: logs/bot.log")
     await dp.start_polling(bot)
 

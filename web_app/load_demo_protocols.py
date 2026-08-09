@@ -30,8 +30,8 @@ from transcript_parser_local import TranscriptParser  # noqa: E402
 
 DEMO_FILES: list[tuple[str, str]] = [
     ("knowledge_base/demo_protocol_1.md", "Демо №1 — полный (100%)"),
-    ("knowledge_base/demo_protocol_2.md", "Демо №2 — частичный (44%)"),
-    ("knowledge_base/demo_protocol_3.md", "Демо №3 — почти готов (78%)"),
+    ("knowledge_base/demo_protocol_2.md", "Демо №2 — частичный (≈43%)"),
+    ("knowledge_base/demo_protocol_3.md", "Демо №3 — почти готов (≈86%)"),
     ("knowledge_base/demo_protocol_4.md", "Демо №4 — мало данных (0%)"),
 ]
 

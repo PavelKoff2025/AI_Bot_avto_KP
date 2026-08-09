@@ -57,16 +57,16 @@
         
         <div class="grid-2">
             <div>
-                <label>Телефон</label>
-                <input type="text" name="client_phone" value="{{ deal.client_phone if deal else '' }}">
+                <label>Телефон <span style="color:#c00">*</span></label>
+                <input type="text" name="client_phone" value="{{ deal.client_phone if deal else '' }}" required>
             </div>
             <div>
-                <label>Email</label>
-                <input type="email" name="client_email" value="{{ deal.client_email if deal else '' }}">
+                <label>Email <span style="color:#c00">*</span> <span style="opacity:.7">(основной канал КП)</span></label>
+                <input type="email" name="client_email" value="{{ deal.client_email if deal else '' }}" required>
             </div>
         </div>
         
-        <label>Telegram</label>
+        <label>Telegram <span style="opacity:.7">(необязательно)</span></label>
         <input type="text" name="client_telegram" value="{{ deal.client_telegram if deal else '' }}">
 
         <h3 class="section-title">Поля эталона для КП</h3>

@@ -21,20 +21,21 @@ class TranscriptParser:
     """
 
     # Обязательные поля эталона (ключи CRM / БД)
+    # Telegram и бюджет — опциональны; email обязателен наравне с телефоном.
     required_fields = [
         "client_phone",
         "client_email",
         "plot",
-        "budget",
         "area",
         "material",
         "timeline",
         "funding_source",
     ]
 
-    # Рекомендуемые (не входят в completion_percent по критичным, но извлекаются)
+    # Рекомендуемые (не входят в completion_percent)
     optional_fields = [
         "client_telegram",
+        "budget",
     ]
 
     field_names = {

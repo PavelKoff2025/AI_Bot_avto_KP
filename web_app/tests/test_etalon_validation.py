@@ -19,7 +19,7 @@ from pricing import calc_tk_cost  # noqa: E402
 from transcript_parser_local import parse_transcript_local, validate_against_etalon  # noqa: E402
 
 
-# Полный протокол ≈ 100% (все 8 обязательных полей эталона; бюджет не обязателен)
+# Полный протокол ≈ 100% (все 7 обязательных полей эталона; бюджет и Telegram не обязательны)
 PROTOCOL_100 = """
 ПРОТОКОЛ ТЕЛЕФОННОГО РАЗГОВОРА № 12/07
 Потенциальный заказчик: Иван
@@ -35,7 +35,7 @@ Telegram: @ivan_petrov
 Финансирование: свои накопления и маткапитал.
 """
 
-# ~38%: 3 из 8 (телефон, email, площадь)
+# ~43%: 3 из 7 (телефон, email, площадь)
 PROTOCOL_50 = """
 Клиент: Пётр
 Телефон: +7 900 111-22-33
@@ -45,7 +45,7 @@ Email: petr@mail.ru
 Про материал стен и место строительства ещё не решил, сроки не обсуждали.
 """
 
-# ~75%: 6 из 8 (без telegram, без финансирования)
+# ~86%: 6 из 7 (без финансирования); Telegram не обязателен
 PROTOCOL_70 = """
 Потенциальный заказчик: Анна
 Телефон: +7 911 222-33-44
@@ -57,10 +57,13 @@ Email: anna@example.com
 
 
 class TestValidateAgainstEtalon(unittest.TestCase):
-    def test_etalon_has_eight_fields_without_budget(self):
+    def test_etalon_has_seven_fields_without_budget_and_telegram(self):
         keys = [k for k, _ in ETALON_FIELDS]
-        self.assertEqual(len(keys), 8)
+        self.assertEqual(len(keys), 7)
         self.assertNotIn("budget", keys)
+        self.assertNotIn("client_telegram", keys)
+        self.assertIn("client_phone", keys)
+        self.assertIn("client_email", keys)
 
     def test_tk_cost_from_area(self):
         self.assertEqual(calc_tk_cost("150 м²"), 6_150_000)
@@ -76,7 +79,7 @@ class TestValidateAgainstEtalon(unittest.TestCase):
 
     def test_protocol_partial_lists_missing(self):
         result = validate_against_etalon(PROTOCOL_50)
-        # 3/8 ≈ 38%
+        # 3/7 ≈ 43%
         self.assertGreaterEqual(result["score"], 30)
         self.assertLessEqual(result["score"], 50)
         self.assertFalse(result["is_complete"])
@@ -85,16 +88,16 @@ class TestValidateAgainstEtalon(unittest.TestCase):
         for label in ("Участок", "Материал стен", "Сроки старта"):
             self.assertIn(label, result["missing"])
         self.assertNotIn("Бюджет", result["missing"])
+        self.assertNotIn("Telegram", result["missing"])
 
-    def test_protocol_70_percent_recommend_collect(self):
+    def test_protocol_missing_funding_only(self):
         result = validate_against_etalon(PROTOCOL_70)
-        # 6/8 = 75%
-        self.assertGreaterEqual(result["score"], 70)
-        self.assertLess(result["score"], KP_THRESHOLD)
-        self.assertEqual(result["grade"], "mid")
-        self.assertFalse(result["can_generate_kp"])
+        # 6/7 ≈ 86% → уже можно КП
+        self.assertGreaterEqual(result["score"], KP_THRESHOLD)
+        self.assertEqual(result["grade"], "high")
+        self.assertTrue(result["can_generate_kp"])
         self.assertFalse(result["is_complete"])
-        self.assertIn("Telegram", result["missing"])
+        self.assertNotIn("Telegram", result["missing"])
         self.assertIn("Финансирование", result["missing"])
         self.assertTrue(result["questions"])
 
@@ -102,13 +105,11 @@ class TestValidateAgainstEtalon(unittest.TestCase):
         result = validate_against_etalon(
             PROTOCOL_70,
             overrides={
-                "client_telegram": "@anna",
                 "funding_source": "ипотека",
             },
         )
-        self.assertGreaterEqual(result["score"], KP_THRESHOLD)
+        self.assertEqual(result["score"], 100)
         self.assertTrue(result["can_generate_kp"])
-        self.assertNotIn("Telegram", result["missing"])
         self.assertNotIn("Финансирование", result["missing"])
 
     def test_parse_then_score_consistency(self):
@@ -122,7 +123,7 @@ class TestValidateAgainstEtalon(unittest.TestCase):
         result = validate_against_etalon("")
         self.assertEqual(result["score"], 0)
         self.assertFalse(result["can_generate_kp"])
-        self.assertEqual(len(result["missing"]), 8)
+        self.assertEqual(len(result["missing"]), 7)
 
 
 if __name__ == "__main__":

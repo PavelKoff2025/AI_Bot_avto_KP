@@ -173,6 +173,12 @@ else
     --exclude '.DS_Store' \
     "${ROOT}/knowledge_base/" \
     "${REMOTE}:${REMOTE_PATH}/knowledge_base/" 2>/dev/null || true
+
+  # Telegram-бот (привязка chat_id + менеджерский FSM)
+  rsync -az \
+    -e "$RSYNC_SSH" \
+    "${ROOT}/bot.py" \
+    "${REMOTE}:${REMOTE_PATH}/bot.py"
 fi
 
 echo "3/4 Бэкап БД + перезапуск..."
@@ -200,7 +206,7 @@ sleep 1
 
 # Зависимости CRM + КП (тихо, если уже стоят)
 if command -v pip3 >/dev/null 2>&1; then
-  pip3 install -q flask werkzeug python-docx PyPDF2 jinja2 weasyprint openai python-dotenv waitress 2>/dev/null || true
+  pip3 install -q flask werkzeug python-docx PyPDF2 jinja2 weasyprint openai python-dotenv waitress async_timeout aiohttp aiogram 2>/dev/null || true
 fi
 
 # .env с OPENAI_API_KEY: корень репо или web_app
@@ -221,6 +227,23 @@ else
   echo "ВНИМАНИЕ: процесс не найден, смотрите logs/app.log"
   tail -n 40 ../logs/app.log || true
   exit 1
+fi
+
+# Telegram-бот: нужен для deep-link привязки chat_id клиентов
+cd '${REMOTE_PATH}'
+if [[ -f bot.py ]]; then
+  echo "Перезапуск Telegram-бота..."
+  pkill -f 'python3 bot.py' 2>/dev/null || true
+  pkill -f 'python3 .*bot.py' 2>/dev/null || true
+  sleep 1
+  nohup python3 bot.py > logs/bot.log 2>&1 &
+  sleep 2
+  if pgrep -f 'python3 bot.py' >/dev/null 2>&1; then
+    echo "Бот запущен"
+  else
+    echo "ВНИМАНИЕ: бот не стартовал, смотрите logs/bot.log"
+    tail -n 30 logs/bot.log || true
+  fi
 fi
 ENDSSH
 

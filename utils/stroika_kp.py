@@ -194,26 +194,44 @@ def generate_kp_texts_with_ai(
     fallback = _fallback_texts(area_m2, total, material=material)
     try:
         from utils.ai_processor import chat_json
-        from utils.knowledge_base import company_standards_excerpt
+        from utils.knowledge_base import (
+            company_complectations_excerpt,
+            company_standards_excerpt,
+            complectations_short_excerpt,
+        )
     except Exception as exc:  # noqa: BLE001
         logger.warning("OpenAI/knowledge_base недоступны для КП: %s", exc)
         return fallback, False
 
     try:
-        standards = company_standards_excerpt(5500)
+        standards = company_standards_excerpt(4000)
     except FileNotFoundError as exc:
         logger.warning("%s", exc)
         standards = ""
+    try:
+        short = complectations_short_excerpt(1500)
+    except FileNotFoundError as exc:
+        logger.warning("%s", exc)
+        short = ""
+    try:
+        complectations = company_complectations_excerpt(2500)
+    except FileNotFoundError as exc:
+        logger.warning("%s", exc)
+        complectations = ""
 
     system = (
         f"Ты — коммерческий копирайтер компании «{COMPANY_NAME}», "
         f"специализация — частные дома из газобетона в {COMPANY_REGION} "
         f"от {MIN_AREA_M2} м² (стандарт {STANDARD_AREA_MIN}–{STANDARD_AREA_MAX} м²). "
-        f"Этап КП — только «Стройка»: тёплый контур (коробка) из газобетона. "
-        f"Корпоративная цена строго {PRICE_PER_M2} ₽/м². "
-        "Не меняй цену и итог. Не обещай «под ключ» с отделкой. "
-        "Опирайся ТОЛЬКО на стандарты компании ниже. Пиши по-русски, деловым стилем.\n\n"
-        f"=== БАЗА ЗНАНИЙ: company_standards.md ===\n{standards}\n"
+        f"Этап КП — «Стройка»: тёплый контур из газобетона. "
+        f"Корпоративная база цены строго {PRICE_PER_M2} ₽/м². "
+        "Не меняй цену и итог в коммерческом блоке. "
+        "Можно кратко сослаться на уровни комплектаций из справки, "
+        "но предмет этого КП — тёплый контур (не «под ключ»). "
+        "Опирайся ТОЛЬКО на базу знаний ниже. Пиши по-русски, деловым стилем.\n\n"
+        f"=== БЫСТРАЯ СПРАВКА: complectations_short.md ===\n{short}\n\n"
+        f"=== БАЗА ЗНАНИЙ: company_standards.md ===\n{standards}\n\n"
+        f"=== БАЗА ЗНАНИЙ: company_complectations.md ===\n{complectations}\n"
         "=== КОНЕЦ БАЗЫ ЗНАНИЙ ==="
     )
     user = (
@@ -330,6 +348,22 @@ def build_stroika_kp_context(
 
     manager = manager_name or "Отдел продаж «Дом Мастер»"
 
+    complectations_table = [
+        {"name": "Холодный контур", "price": "9 500 000 ₽"},
+        {"name": "Тёплый контур", "price": "10 500 000 ₽"},
+        {"name": "White Box", "price": "+2 500 000 ₽"},
+        {"name": "Под ключ", "price": "индивидуально"},
+    ]
+    complectations_formula = (
+        f"Стоимость ТК = Площадь (м²) × {format_money(PRICE_PER_M2)} ₽/м² + внешняя отделка"
+    )
+    complectations_notes = [
+        "Холодный контур — коробка дома (фундамент, стены, крыша, окна, дверь)",
+        "Тёплый контур — коробка + внешняя отделка фасада + водосточная система",
+        "White Box — черновая отделка + инженерия (отопление, электрика, водоснабжение)",
+        "Под ключ — полная готовая отделка, мебель, техника",
+    ]
+
     return {
         "company_name": COMPANY_NAME,
         "kp_number": kp_number,
@@ -365,6 +399,10 @@ def build_stroika_kp_context(
             f"{area_note} Цена для {COMPANY_REGION}."
         ).strip(),
         "budget_note": budget_note,
+        "complectations_table": complectations_table,
+        "complectations_formula": complectations_formula,
+        "complectations_notes": complectations_notes,
+        "complectations_base_area": 150,
         "included": list(WARM_CONTOUR_SCOPE),
         "excluded": list(EXCLUDED_SCOPE),
         "terms": list(DEFAULT_TERMS),

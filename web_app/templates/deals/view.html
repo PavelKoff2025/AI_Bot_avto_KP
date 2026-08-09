@@ -66,6 +66,20 @@
                             {% else %}
                                 <span class="text-danger">не указан</span>
                             {% endif %}
+                            {% if deal.telegram_chat_id %}
+                                <div class="small text-success mt-1">chat_id: {{ deal.telegram_chat_id }} · привязан</div>
+                            {% elif telegram_bind_link %}
+                                <div class="small mt-1">
+                                    <label class="form-label mb-0">Ссылка привязки</label>
+                                    <div class="input-group input-group-sm">
+                                        <input type="text" class="form-control font-monospace" id="tgBindInputTop"
+                                               value="{{ telegram_bind_link }}" readonly
+                                               onclick="this.select();">
+                                        <button type="button" class="btn btn-outline-primary"
+                                                onclick="copyBindLinkFrom('tgBindInputTop')">Копировать</button>
+                                    </div>
+                                </div>
+                            {% endif %}
                         </td>
                     </tr>
                     <tr>
@@ -186,11 +200,78 @@
                         </table>
                     </div>
                     <div class="col-md-4 text-md-end">
-                        <button class="btn btn-success btn-lg" type="button" id="btnDownloadKp"
-                                onclick="downloadKpPdf({{ deal.id }})">
-                            <i class="bi bi-download"></i> Скачать PDF
-                        </button>
-                        <div class="small text-muted mt-2">Файл останется на этой странице — без перехода по ссылке.</div>
+                        <div class="d-grid gap-2">
+                            <button class="btn btn-success" type="button" id="btnDownloadKp"
+                                    onclick="downloadKpPdf({{ deal.id }})">
+                                <i class="bi bi-download"></i> Скачать PDF
+                            </button>
+                            {% if kp_meta.watermark != 'approved' %}
+                            <button class="btn btn-primary" type="button" id="btnApproveKp"
+                                    onclick="approveKp({{ deal.id }})">
+                                <i class="bi bi-check2-circle"></i> Утвердить
+                            </button>
+                            {% else %}
+                            <button class="btn btn-outline-primary" type="button" disabled>
+                                <i class="bi bi-check2-circle"></i> Утверждено
+                            </button>
+                            <button class="btn btn-warning" type="button" id="btnSendKpEmail"
+                                    onclick="sendKp({{ deal.id }}, ['email'])"
+                                    {% if not deal.client_email or not smtp_ready %}disabled
+                                    title="{% if not deal.client_email %}Email обязателен{% else %}SMTP не настроен{% endif %}"
+                                    {% endif %}>
+                                <i class="bi bi-envelope"></i> Email
+                                <span class="badge text-bg-dark ms-1">основной</span>
+                            </button>
+                            <button class="btn btn-info text-white" type="button" id="btnSendKpTelegram"
+                                    onclick="sendKp({{ deal.id }}, ['telegram'])"
+                                    {% if not telegram_chat_ready or not telegram_ready %}disabled
+                                    title="{% if not telegram_ready %}TELEGRAM_BOT_TOKEN не задан{% elif not telegram_chat_ready %}Telegram не привязан (опционально){% endif %}"
+                                    {% endif %}>
+                                <i class="bi bi-telegram"></i> Telegram
+                                <span class="badge text-bg-light text-dark ms-1">опция</span>
+                            </button>
+                            {% endif %}
+                        </div>
+                        <div class="small mt-2 text-start border-top pt-2">
+                            <strong>Привязка Telegram</strong><br>
+                            {% if telegram_chat_ready %}
+                                <span class="text-success">Привязан
+                                {% if deal.telegram_chat_id %}· ID {{ deal.telegram_chat_id }}{% endif %}
+                                {% if deal.client_telegram %} · {{ deal.client_telegram }}{% endif %}</span>
+                            {% elif telegram_bind_link %}
+                                Отправьте клиенту ссылку — он нажмёт Start, chat_id сохранится сам:
+                                <div class="input-group input-group-sm mt-1">
+                                    <input type="text" class="form-control font-monospace" id="tgBindInput"
+                                           value="{{ telegram_bind_link }}" readonly
+                                           onclick="this.select();">
+                                    <button type="button" class="btn btn-outline-primary"
+                                            onclick="copyBindLinkFrom('tgBindInput')">Копировать</button>
+                                </div>
+                                <div class="mt-1">
+                                    <a href="{{ telegram_bind_link }}" target="_blank" rel="noopener">Открыть в Telegram</a>
+                                </div>
+                            {% else %}
+                                <span class="text-danger">Не удалось получить username бота</span>
+                            {% endif %}
+                        </div>
+                        {% if kp_meta.watermark == 'approved' %}
+                        <div class="small mt-2">
+                            {% if deal.client_email %}
+                                Email: {{ deal.client_email }}
+                                {% if not smtp_ready %}<span class="text-danger">(SMTP не настроен)</span>{% endif %}
+                            {% else %}
+                                <span class="text-danger">Email не указан</span>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                        {% if deal.delivery_status %}
+                        <div class="alert alert-{{ 'success' if deal.delivery_status == 'ok' else 'warning' }} py-2 px-3 mt-2 mb-0 small">
+                            Отправка: {{ deal.delivery_status }}
+                            {% if deal.delivery_date %} · {{ deal.delivery_date }}{% endif %}
+                            {% if deal.delivery_method %} · {{ deal.delivery_method }}{% endif %}
+                            {% if deal.delivery_error %}<br>{{ deal.delivery_error }}{% endif %}
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -293,6 +374,39 @@
 
 {% block scripts %}
 <script>
+function copyBindLinkFrom(inputId) {
+    const input = document.getElementById(inputId);
+    const text = (input && input.value) ? input.value.trim() : '';
+    if (!text || text.indexOf('t.me/') === -1) {
+        alert('Ссылка не найдена. Обновите страницу (Ctrl+Shift+R).');
+        return;
+    }
+    if (input) {
+        input.focus();
+        input.select();
+        input.setSelectionRange(0, text.length);
+    }
+    let ok = false;
+    try {
+        ok = document.execCommand('copy');
+    } catch (e) {
+        ok = false;
+    }
+    if (!ok && navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () {
+            alert('Скопирована ссылка:\n' + text);
+        }).catch(function () {
+            alert('Скопируйте вручную из поля:\n' + text);
+        });
+        return;
+    }
+    if (ok) {
+        alert('Скопирована ссылка:\n' + text);
+    } else {
+        alert('Скопируйте вручную из поля:\n' + text);
+    }
+}
+
 function downloadKpPdf(dealId) {
     const btn = document.getElementById('btnDownloadKp');
     const prev = btn ? btn.innerHTML : '';
@@ -327,6 +441,118 @@ function downloadKpPdf(dealId) {
                 btn.innerHTML = prev || '<i class="bi bi-download"></i> Скачать PDF';
             }
         });
+}
+
+function approveKp(dealId) {
+    if (!confirm('Утвердить КП? Будет создан PDF с водяным знаком «УТВЕРЖДЕНО».')) return;
+    const btn = document.getElementById('btnApproveKp');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Утверждение…';
+    }
+    fetch('/deals/' + dealId + '/approve-kp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+    })
+    .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok || data.status === 'error') {
+            alert('Ошибка: ' + (data.message || 'не удалось утвердить'));
+            if (btn) location.reload();
+            return;
+        }
+        alert(data.message || 'КП утверждено');
+        location.reload();
+    })
+    .catch((error) => {
+        alert('Ошибка: ' + error);
+        location.reload();
+    });
+}
+
+function sendKp(dealId, channels) {
+    const hasEmail = {{ 'true' if deal.client_email else 'false' }};
+    const hasTg = {{ 'true' if telegram_chat_ready else 'false' }};
+    const smtpReady = {{ 'true' if smtp_ready else 'false' }};
+    const tgReady = {{ 'true' if telegram_ready else 'false' }};
+    const wanted = Array.isArray(channels) ? channels.slice() : [];
+    const selected = [];
+
+    if (wanted.includes('email')) {
+        if (!hasEmail) {
+            alert('У клиента не указан email.');
+            return;
+        }
+        if (!smtpReady) {
+            alert('SMTP не настроен в .env.');
+            return;
+        }
+        selected.push('email');
+    }
+    if (wanted.includes('telegram')) {
+        if (!hasTg) {
+            alert('Telegram не привязан. Отправьте клиенту ссылку привязки.');
+            return;
+        }
+        if (!tgReady) {
+            alert('TELEGRAM_BOT_TOKEN не задан.');
+            return;
+        }
+        selected.push('telegram');
+    }
+
+    if (!selected.length) {
+        alert('Выберите канал отправки: Email или Telegram.');
+        return;
+    }
+
+    const labels = { email: 'Email', telegram: 'Telegram' };
+    const pretty = selected.map((c) => labels[c] || c).join(', ');
+    if (!confirm('Отправить утверждённое КП клиенту?\nКанал: ' + pretty)) return;
+
+    const btns = [
+        document.getElementById('btnSendKpEmail'),
+        document.getElementById('btnSendKpTelegram'),
+    ].filter(Boolean);
+    btns.forEach((btn) => { btn.disabled = true; });
+    const activeId = selected[0] === 'email' ? 'btnSendKpEmail' : 'btnSendKpTelegram';
+    const active = document.getElementById(activeId);
+    const prevHtml = active ? active.innerHTML : '';
+    if (active) {
+        active.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Отправка…';
+    }
+
+    fetch('/deals/' + dealId + '/send-kp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channels: selected })
+    })
+    .then(async (response) => {
+        const data = await response.json();
+        const lines = [];
+        if (data.message) lines.push(data.message);
+        if (Array.isArray(data.results)) {
+            data.results.forEach((r) => {
+                if (r && r.method === 'email') lines.push('Email: ок');
+                else if (r && r.method === 'telegram') lines.push('Telegram: ок');
+                else if (r && r.method === 'telegram_queued' && r.message && !data.message) {
+                    lines.push(r.message);
+                }
+            });
+        }
+        if (Array.isArray(data.errors) && data.errors.length) {
+            lines.push('Замечания: ' + data.errors.join('; '));
+        }
+        alert(lines.join('\n') || (response.ok ? 'Отправлено' : 'Ошибка отправки'));
+        location.reload();
+    })
+    .catch((error) => {
+        alert('Ошибка: ' + error);
+        if (active) active.innerHTML = prevHtml;
+        btns.forEach((btn) => { btn.disabled = false; });
+        location.reload();
+    });
 }
 
 function generateKP(dealId) {

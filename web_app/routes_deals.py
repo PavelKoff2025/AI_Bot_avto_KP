@@ -66,6 +66,18 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+
+def _missing_required_contacts(phone: str | None, email: str | None) -> list[str]:
+    """Телефон и email обязательны; email — основной канал отправки КП."""
+    missing: list[str] = []
+    if not (phone or '').strip():
+        missing.append('телефон')
+    em = (email or '').strip()
+    if not em or '@' not in em:
+        missing.append('email')
+    return missing
+
+
 def get_db():
     return connect_db('deals.db')
 
@@ -227,6 +239,15 @@ def new_deal():
         client_phone = parsed_data.get('client_phone')
         client_email = parsed_data.get('client_email')
         client_telegram = parsed_data.get('client_telegram')
+
+        contact_gaps = _missing_required_contacts(client_phone, client_email)
+        if contact_gaps:
+            flash(
+                'Укажите обязательные контакты: ' + ', '.join(contact_gaps)
+                + ' (email — основной канал КП; Telegram опционален).',
+                'error',
+            )
+            return redirect(request.url)
         plot = parsed_data.get('plot')
         budget = parsed_data.get('budget')  # необязательно (если клиент назвал)
         area = parsed_data.get('area')
@@ -333,6 +354,13 @@ def deal_detail(deal_id):
 
     kp_meta = _parse_kp_options(deal.get('kp_options'))
 
+    from mailer import smtp_configured
+    from telegram_send import resolve_deal_chat_id, telegram_configured
+    from utils.crm_telegram import client_bind_link
+
+    chat_ready = bool(resolve_deal_chat_id(deal))
+    bind_link = client_bind_link(deal["id"]) if not chat_ready else None
+
     return render_template(
         'deals/view.html',
         deal=deal,
@@ -340,6 +368,10 @@ def deal_detail(deal_id):
         field_rows=field_rows,
         kp_threshold=KP_THRESHOLD,
         kp_meta=kp_meta,
+        smtp_ready=smtp_configured(),
+        telegram_ready=telegram_configured(),
+        telegram_chat_ready=chat_ready,
+        telegram_bind_link=bind_link,
     )
 
 @deals_bp.route('/<int:deal_id>/incomplete')
@@ -441,6 +473,15 @@ def edit_deal(deal_id):
             except Exception as e:
                 logger.error(f"Ошибка перепарсинга при редактировании: {e}")
                 flash(f'Ошибка обновления данных транскрибации: {e}', 'warning')
+
+        contact_gaps = _missing_required_contacts(client_phone, client_email)
+        if contact_gaps:
+            flash(
+                'Укажите обязательные контакты: ' + ', '.join(contact_gaps)
+                + ' (email — основной канал КП; Telegram опционален).',
+                'error',
+            )
+            return redirect(url_for('deals.edit_deal', deal_id=deal_id))
 
         try:
             tk_cost = calc_tk_cost(area)
@@ -608,6 +649,376 @@ def download_kp(deal_id):
     )
     response.headers['Cache-Control'] = 'no-store'
     return response
+
+
+@deals_bp.route('/telegram-outbox', methods=['GET'])
+def telegram_outbox_list():
+    """Очередь КП на отправку в Telegram (забирает локальный бот)."""
+    expected = os.getenv('TELEGRAM_BOT_TOKEN', '').strip()
+    got = (request.headers.get('X-Bot-Token') or '').strip()
+    if not expected or got != expected:
+        return jsonify({'ok': False, 'message': 'Unauthorized'}), 401
+
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT id, telegram_outbox FROM deals WHERE telegram_outbox IS NOT NULL AND telegram_outbox != ''"
+    ).fetchall()
+    conn.close()
+    items = []
+    for row in rows:
+        try:
+            payload = json.loads(row['telegram_outbox'])
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        if isinstance(payload, dict):
+            payload['deal_id'] = row['id']
+            items.append(payload)
+    return jsonify({'ok': True, 'items': items})
+
+
+@deals_bp.route('/telegram-outbox/<int:deal_id>', methods=['POST'])
+def telegram_outbox_ack(deal_id):
+    """Подтверждение доставки из локального бота."""
+    expected = os.getenv('TELEGRAM_BOT_TOKEN', '').strip()
+    got = (request.headers.get('X-Bot-Token') or '').strip()
+    if not expected or got != expected:
+        return jsonify({'ok': False, 'message': 'Unauthorized'}), 401
+
+    payload = request.get_json(silent=True) or {}
+    ok = bool(payload.get('ok', True))
+    from datetime import datetime
+
+    conn = get_db()
+    if ok:
+        conn.execute(
+            '''
+            UPDATE deals SET
+                telegram_outbox = NULL,
+                delivery_method = CASE
+                    WHEN delivery_method IS NULL OR delivery_method = '' THEN 'telegram'
+                    WHEN delivery_method LIKE '%telegram%' THEN delivery_method
+                    ELSE delivery_method || '+telegram'
+                END,
+                delivery_date = ?,
+                delivery_status = 'ok',
+                delivery_error = NULL,
+                status = CASE WHEN status IN ('approved', 'kp_ready', 'new') THEN 'sent' ELSE status END
+            WHERE id = ?
+            ''',
+            (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), deal_id),
+        )
+    else:
+        err = str(payload.get('error') or 'outbox send failed')
+        conn.execute(
+            'UPDATE deals SET delivery_status = ?, delivery_error = ? WHERE id = ?',
+            ('error', err, deal_id),
+        )
+    conn.commit()
+    conn.close()
+    return jsonify({'ok': True})
+
+
+@deals_bp.route('/<int:deal_id>/telegram-bind', methods=['POST'])
+def telegram_bind_api(deal_id):
+    """
+    Публичный endpoint для бота: сохранить chat_id клиента.
+    Auth: заголовок X-Bot-Token == TELEGRAM_BOT_TOKEN.
+    """
+    expected = os.getenv('TELEGRAM_BOT_TOKEN', '').strip()
+    got = (request.headers.get('X-Bot-Token') or '').strip()
+    if not expected or got != expected:
+        return jsonify({'ok': False, 'message': 'Unauthorized'}), 401
+
+    payload = request.get_json(silent=True) or {}
+    chat_id = str(payload.get('chat_id') or '').strip()
+    username = (payload.get('username') or '').strip().lstrip('@') or None
+    if not chat_id.isdigit() and not (chat_id.startswith('-') and chat_id[1:].isdigit()):
+        return jsonify({'ok': False, 'message': 'chat_id обязателен'}), 400
+
+    conn = get_db()
+    try:
+        row = conn.execute(
+            'SELECT id, client_name, client_telegram FROM deals WHERE id = ?',
+            (deal_id,),
+        ).fetchone()
+        if not row:
+            return jsonify({'ok': False, 'message': f'Сделка #{deal_id} не найдена'}), 404
+
+        current_tg = (row['client_telegram'] or '').strip()
+        new_client_tg = current_tg
+        if username and (not current_tg or current_tg.isdigit()):
+            new_client_tg = f'@{username}'
+
+        conn.execute(
+            '''
+            UPDATE deals
+            SET telegram_chat_id = ?,
+                client_telegram = COALESCE(NULLIF(?, ''), client_telegram)
+            WHERE id = ?
+            ''',
+            (chat_id, new_client_tg, deal_id),
+        )
+        conn.commit()
+        return jsonify({
+            'ok': True,
+            'deal_id': deal_id,
+            'client_name': row['client_name'] or 'Клиент',
+            'chat_id': chat_id,
+            'username': username,
+        })
+    except Exception as exc:  # noqa: BLE001
+        logger.exception('telegram-bind failed deal=%s', deal_id)
+        return jsonify({'ok': False, 'message': str(exc)}), 500
+    finally:
+        conn.close()
+
+
+@deals_bp.route('/<int:deal_id>/kp.pdf/bot', methods=['GET'])
+def download_kp_bot(deal_id):
+    """Скачивание PDF для локального бота (X-Bot-Token)."""
+    expected = os.getenv('TELEGRAM_BOT_TOKEN', '').strip()
+    got = (request.headers.get('X-Bot-Token') or '').strip()
+    if not expected or got != expected:
+        return jsonify({'ok': False, 'message': 'Unauthorized'}), 401
+
+    conn = get_db()
+    row = conn.execute('SELECT kp_options FROM deals WHERE id = ?', (deal_id,)).fetchone()
+    conn.close()
+    if not row:
+        return jsonify({'ok': False, 'message': 'Сделка не найдена'}), 404
+
+    meta = _parse_kp_options(row['kp_options'] if isinstance(row, sqlite3.Row) else row[0])
+    if not meta or not meta.get('pdf_path'):
+        return jsonify({'ok': False, 'message': 'КП не сгенерировано'}), 404
+
+    path = _safe_kp_pdf_path(meta['pdf_path'])
+    if not path:
+        return jsonify({'ok': False, 'message': 'Файл КП не найден'}), 404
+
+    return send_file(
+        path,
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name=f'KP_DomMaster_deal{deal_id}.pdf',
+        max_age=0,
+    )
+
+
+@deals_bp.route('/<int:deal_id>/approve-kp', methods=['POST'])
+@login_required
+def approve_kp(deal_id):
+    """Пересобирает КП с водяным знаком «УТВЕРЖДЕНО»."""
+    conn = get_db()
+    row = conn.execute('SELECT * FROM deals WHERE id = ?', (deal_id,)).fetchone()
+    if not row:
+        conn.close()
+        return jsonify({'status': 'error', 'message': 'Сделка не найдена'}), 404
+
+    deal = dict(row)
+    meta = _parse_kp_options(deal.get('kp_options'))
+    if not meta:
+        conn.close()
+        return jsonify({
+            'status': 'error',
+            'message': 'Сначала сгенерируйте черновик КП',
+        }), 400
+
+    manager_name = session.get('user_name') or session.get('username') or None
+    try:
+        from utils.stroika_kp import generate_stroika_kp_pdf
+
+        # Без AI — быстрее и стабильнее на VPS; цифры те же по стандарту
+        approved = generate_stroika_kp_pdf(
+            deal,
+            watermark='approved',
+            use_ai=False,
+            manager_name=manager_name,
+        )
+    except Exception as exc:  # noqa: BLE001
+        conn.close()
+        logger.exception('Ошибка утверждения КП #%s', deal_id)
+        return jsonify({'status': 'error', 'message': str(exc)}), 500
+
+    conn.execute(
+        'UPDATE deals SET kp_options = ?, status = ? WHERE id = ?',
+        (json.dumps(approved, ensure_ascii=False), 'approved', deal_id),
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({
+        'status': 'success',
+        'message': f'КП утверждено: {approved.get("total_fmt")}',
+        'kp': approved,
+        'download_url': url_for('deals.download_kp', deal_id=deal_id),
+    })
+
+
+@deals_bp.route('/<int:deal_id>/send-kp', methods=['POST'])
+@login_required
+def send_kp(deal_id):
+    """Отправка утверждённого КП клиенту (email и/или telegram)."""
+    from datetime import datetime
+
+    from mailer import send_kp_email, smtp_configured
+    from telegram_send import resolve_deal_chat_id, send_kp_telegram, telegram_configured
+
+    payload = request.get_json(silent=True) or {}
+    channels = payload.get('channels') or []
+    if isinstance(channels, str):
+        channels = [channels]
+    if not channels:
+        # по умолчанию — email, если есть; иначе telegram
+        channels = ['email']
+
+    conn = get_db()
+    row = conn.execute('SELECT * FROM deals WHERE id = ?', (deal_id,)).fetchone()
+    if not row:
+        conn.close()
+        return jsonify({'status': 'error', 'message': 'Сделка не найдена'}), 404
+
+    deal = dict(row)
+    meta = _parse_kp_options(deal.get('kp_options'))
+    if not meta or not meta.get('pdf_path'):
+        conn.close()
+        return jsonify({'status': 'error', 'message': 'КП ещё не сгенерировано'}), 400
+    if meta.get('watermark') != 'approved':
+        conn.close()
+        return jsonify({
+            'status': 'error',
+            'message': 'Сначала утвердите КП (кнопка «Утвердить»)',
+        }), 400
+
+    path = _safe_kp_pdf_path(meta['pdf_path'])
+    if not path:
+        conn.close()
+        return jsonify({'status': 'error', 'message': 'Файл КП не найден на диске'}), 404
+
+    manager_name = session.get('user_name') or session.get('username') or None
+    results = []
+    errors = []
+
+    if 'email' in channels:
+        email = (deal.get('client_email') or '').strip()
+        if not email:
+            errors.append('У клиента не указан email')
+        elif not smtp_configured():
+            errors.append('SMTP не настроен в .env (SMTP_HOST / SMTP_USER / SMTP_PASSWORD)')
+        else:
+            try:
+                results.append(send_kp_email(
+                    to_email=email,
+                    client_name=deal.get('client_name') or 'Клиент',
+                    pdf_path=path,
+                    kp_meta=meta,
+                    manager_name=manager_name,
+                ))
+            except Exception as exc:  # noqa: BLE001
+                logger.exception('Email send failed deal=%s', deal_id)
+                errors.append(f'Email: {exc}')
+
+    if 'telegram' in channels:
+        chat_id = resolve_deal_chat_id(deal)
+        if not chat_id:
+            errors.append(
+                'Telegram не привязан. Отправьте клиенту ссылку привязки из карточки сделки '
+                '(или сохраните числовой chat_id).'
+            )
+        elif not telegram_configured():
+            errors.append('TELEGRAM_BOT_TOKEN не задан')
+        else:
+            caption = (
+                f"КП «Дом Мастер» {meta.get('kp_number', '')}\n"
+                f"{meta.get('area_m2')} м² · {meta.get('total_fmt')}"
+            )
+            try:
+                results.append(send_kp_telegram(
+                    chat_id=chat_id,
+                    pdf_path=path,
+                    caption=caption,
+                ))
+            except Exception as exc:  # noqa: BLE001
+                logger.exception('Telegram send failed deal=%s — ставим в outbox', deal_id)
+                # VPS часто не достучится до api.telegram.org — очередь для локального бота
+                outbox = {
+                    'deal_id': deal_id,
+                    'chat_id': chat_id,
+                    'pdf_path': str(path),
+                    'pdf_url': f'/deals/{deal_id}/kp.pdf/bot',
+                    'caption': caption,
+                    'queued_at': datetime.now().isoformat(timespec='seconds'),
+                    'error': str(exc),
+                }
+                conn.execute(
+                    'UPDATE deals SET telegram_outbox = ? WHERE id = ?',
+                    (json.dumps(outbox, ensure_ascii=False), deal_id),
+                )
+                conn.commit()
+                results.append({
+                    'ok': True,
+                    'method': 'telegram_queued',
+                    'chat_id': chat_id,
+                    'message': (
+                        'Telegram с сервера недоступен — КП поставлено в очередь. '
+                        'Локальный бот доставит PDF клиенту в течение минуты.'
+                    ),
+                })
+                # Не считаем очередь ошибкой: доставку закрывает outbox-воркер
+
+    method = '+'.join(r.get('method', '') for r in results) or None
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    queued_only = bool(results) and all(r.get('method') == 'telegram_queued' for r in results)
+    has_queue = any(r.get('method') == 'telegram_queued' for r in results)
+
+    if results and not errors:
+        status = 'sent'
+        delivery_status = 'queued' if queued_only else 'ok'
+        delivery_error = None
+        if queued_only:
+            flash_msg = results[0].get('message') or 'КП в очереди Telegram — бот доставит'
+        elif has_queue:
+            flash_msg = (
+                'КП отправлено. Telegram уйдёт через локальный бот '
+                '(сервер к Telegram API недоступен).'
+            )
+        else:
+            flash_msg = 'КП отправлено клиенту'
+        http = 200
+    elif results and errors:
+        status = 'sent'
+        delivery_status = 'partial'
+        delivery_error = '; '.join(errors)
+        flash_msg = 'Отправлено частично: ' + delivery_error
+        http = 200
+    else:
+        status = deal.get('status') or 'approved'
+        delivery_status = 'error'
+        delivery_error = '; '.join(errors) or 'Не удалось отправить'
+        flash_msg = delivery_error
+        http = 400
+
+    conn.execute(
+        '''
+        UPDATE deals SET
+            status = ?,
+            delivery_method = ?,
+            delivery_date = ?,
+            delivery_status = ?,
+            delivery_error = ?
+        WHERE id = ?
+        ''',
+        (status if results else status, method, now if results else deal.get('delivery_date'),
+         delivery_status, delivery_error, deal_id),
+    )
+    conn.commit()
+    conn.close()
+
+    return jsonify({
+        'status': 'success' if results else 'error',
+        'message': flash_msg,
+        'results': results,
+        'errors': errors,
+        'delivery_status': delivery_status,
+    }), http
 
 
 @deals_bp.route('/<int:deal_id>/status', methods=['POST'])

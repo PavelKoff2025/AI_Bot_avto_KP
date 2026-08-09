@@ -208,7 +208,7 @@ BASE_URL=http://127.0.0.1:5002 ./scripts/check_endpoints.sh --quick
   < 80%   →  КП заблокировано, нужно дособрать
 ```
 
-Обязательные поля эталона: телефон, email, telegram, участок, бюджет, площадь, материал, сроки, финансирование.  
+Обязательные поля эталона: телефон, email, участок, площадь, материал, сроки, финансирование. Бюджет и Telegram — опциональны; основной канал отправки КП — email.  
 Тесты: `cd web_app && PYTHONPATH=. python3 -m unittest tests.test_etalon_validation -v`
 
 ---
@@ -225,7 +225,10 @@ BASE_URL=http://127.0.0.1:5002 ./scripts/check_endpoints.sh --quick
 ├── scripts/               # push/pull Docker Hub, check endpoints
 ├── sample_dialog.txt      # пример транскрибации (fallback эталона)
 ├── knowledge_base/
-│   └── etalon_protocol.md # эталон обязательных полей для КП
+│   ├── etalon_protocol.md          # эталон обязательных полей для КП
+│   ├── company_standards.md        # стандарты «Дом-Мастер» (RAG)
+│   ├── company_complectations.md   # виды комплектаций (RAG)
+│   └── complectations_short.md     # краткая справка для вставки в КП
 ├── web_app/               # CRM менеджера: сделки + проверка эталона
 ├── requirements.txt       # зависимости (диапазоны)
 ├── requirements.lock.txt  # зафиксированные версии
