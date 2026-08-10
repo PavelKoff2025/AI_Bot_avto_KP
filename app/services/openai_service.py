@@ -1,5 +1,4 @@
 import json
-import openai
 from ..config import Config
 
 PROMPT = """
@@ -27,7 +26,9 @@ PROMPT = """
 def classify_ticket(text: str) -> dict:
     """Классификация обращения через OpenAI API"""
     try:
-        client = openai.OpenAI(api_key=Config.OPENAI_API_KEY)
+        from utils.ai_processor import get_openai_client
+
+        client = get_openai_client()
         
         response = client.chat.completions.create(
             model=Config.OPENAI_MODEL,

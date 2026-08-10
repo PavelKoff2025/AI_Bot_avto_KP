@@ -61,12 +61,27 @@ DESIGN_REPORT_PROMPT = """
 
 
 def get_openai_client() -> OpenAI:
-    """Публичный доступ к OpenAI-клиенту (ключ из OPENAI_API_KEY)."""
+    """Публичный доступ к OpenAI-клиенту (ключ из OPENAI_API_KEY, опционально прокси)."""
+    from utils.config import apply_outbound_proxy_env, openai_proxy_url
+
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key or api_key == "your_openai_api_key_here":
         raise ValueError(
             "Не задан OPENAI_API_KEY. Укажите ключ в файле .env"
         )
+
+    apply_outbound_proxy_env()
+    proxy = openai_proxy_url()
+    if proxy:
+        try:
+            import httpx
+        except ImportError as exc:  # pragma: no cover
+            raise RuntimeError(
+                "Для OPENAI_PROXY нужен пакет httpx (pip install httpx)"
+            ) from exc
+        # openai.proxy = {...} устарело; в SDK v1 — httpx Client(proxy=...)
+        http_client = httpx.Client(proxy=proxy, timeout=90.0)
+        return OpenAI(api_key=api_key, http_client=http_client)
     return OpenAI(api_key=api_key)
 
 

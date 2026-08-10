@@ -47,7 +47,15 @@ def parse_transcript(text: str) -> dict:
     Парсит транскрибацию через OpenAI и возвращает структурированные данные
     """
     try:
-        client = openai.OpenAI(api_key=openai.api_key)
+        import sys
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parent.parent
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+        from utils.ai_processor import get_openai_client
+
+        client = get_openai_client()
         
         response = client.chat.completions.create(
             model=os.getenv('OPENAI_MODEL', 'gpt-3.5-turbo'),

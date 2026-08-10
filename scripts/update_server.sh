@@ -197,6 +197,11 @@ else
 fi
 
 echo "Останавливаем старый процесс..."
+# Если стоят systemd-юниты — ими и управляем
+if systemctl list-unit-files dommaster-crm.service 2>/dev/null | grep -q dommaster-crm; then
+  systemctl stop dommaster-bot.service 2>/dev/null || true
+  systemctl stop dommaster-crm.service 2>/dev/null || true
+fi
 pkill -f 'python3 .*web_app/app.py' 2>/dev/null || true
 pkill -f 'python3 app.py' 2>/dev/null || true
 # Waitress остаётся тем же python3 app.py — даём порту освободиться
@@ -206,7 +211,7 @@ sleep 1
 
 # Зависимости CRM + КП (тихо, если уже стоят)
 if command -v pip3 >/dev/null 2>&1; then
-  pip3 install -q flask werkzeug python-docx PyPDF2 jinja2 weasyprint openai python-dotenv waitress async_timeout aiohttp aiogram 2>/dev/null || true
+  pip3 install -q flask werkzeug python-docx PyPDF2 jinja2 weasyprint openai python-dotenv waitress async_timeout aiohttp aiogram httpx 2>/dev/null || true
 fi
 
 # .env с OPENAI_API_KEY: корень репо или web_app
@@ -214,24 +219,8 @@ if [[ -f .env && ! -f web_app/.env ]]; then
   ln -sfn ../.env web_app/.env 2>/dev/null || cp -n .env web_app/.env 2>/dev/null || true
 fi
 
-echo "Запуск web_app/app.py..."
-cd web_app
-# reports/kp рядом с репо (PROJECT_ROOT)
-mkdir -p ../reports/kp/stroika
-nohup python3 app.py > ../logs/app.log 2>&1 &
-sleep 2
-
-if pgrep -f 'python3 app.py' >/dev/null 2>&1 || pgrep -f 'web_app/app.py' >/dev/null 2>&1; then
-  echo "Процесс запущен"
-else
-  echo "ВНИМАНИЕ: процесс не найден, смотрите logs/app.log"
-  tail -n 40 ../logs/app.log || true
-  exit 1
-fi
-
 # Telegram API с этого VPS: основной A-record часто недоступен.
 # Пин рабочего DC (см. scripts/fix_telegram_access.sh).
-# Надёжный пин без вложенного heredoc:
 grep -vE '[[:space:]]api\.telegram\.org([[:space:]]|\$)' /etc/hosts > /tmp/hosts.tg 2>/dev/null || true
 if [[ ! -s /tmp/hosts.tg ]]; then
   printf '%s\n' \
@@ -249,20 +238,54 @@ if [[ -f /etc/gai.conf ]] && ! grep -qE '^precedence ::ffff:0:0/96[[:space:]]+10
 fi
 echo "Telegram pin: \$(getent hosts api.telegram.org | head -1 || true)"
 
-# Telegram-бот: нужен для deep-link привязки chat_id клиентов
-cd '${REMOTE_PATH}'
-if [[ -f bot.py ]]; then
-  echo "Перезапуск Telegram-бота..."
-  pkill -f 'python3 bot.py' 2>/dev/null || true
-  pkill -f 'python3 .*bot.py' 2>/dev/null || true
-  sleep 1
-  nohup python3 bot.py >> logs/bot.log 2>&1 &
+if systemctl list-unit-files dommaster-crm.service 2>/dev/null | grep -q dommaster-crm; then
+  echo "Запуск через systemd (dommaster-crm / dommaster-bot)..."
+  systemctl start dommaster-crm.service
   sleep 2
-  if pgrep -f 'python3 bot.py' >/dev/null 2>&1; then
-    echo "Бот запущен"
+  systemctl start dommaster-bot.service
+  sleep 2
+  if systemctl is-active --quiet dommaster-crm.service; then
+    echo "CRM (systemd) активен"
   else
-    echo "ВНИМАНИЕ: бот не стартовал, смотрите logs/bot.log"
-    tail -n 30 logs/bot.log || true
+    echo "ВНИМАНИЕ: dommaster-crm не активен"
+    systemctl --no-pager -l status dommaster-crm.service || true
+    exit 1
+  fi
+  if systemctl is-active --quiet dommaster-bot.service; then
+    echo "Бот (systemd) активен"
+  else
+    echo "ВНИМАНИЕ: dommaster-bot не активен"
+    systemctl --no-pager -l status dommaster-bot.service || true
+  fi
+else
+  echo "Запуск web_app/app.py (nohup)..."
+  cd web_app
+  mkdir -p ../reports/kp/stroika ../logs
+  nohup python3 app.py > ../logs/app.log 2>&1 &
+  sleep 2
+
+  if pgrep -f 'python3 app.py' >/dev/null 2>&1 || pgrep -f 'web_app/app.py' >/dev/null 2>&1; then
+    echo "Процесс CRM запущен"
+  else
+    echo "ВНИМАНИЕ: процесс не найден, смотрите logs/app.log"
+    tail -n 40 ../logs/app.log || true
+    exit 1
+  fi
+
+  cd '${REMOTE_PATH}'
+  if [[ -f bot.py ]]; then
+    echo "Перезапуск Telegram-бота..."
+    pkill -f 'python3 bot.py' 2>/dev/null || true
+    pkill -f 'python3 .*bot.py' 2>/dev/null || true
+    sleep 1
+    nohup python3 bot.py >> logs/bot.log 2>&1 &
+    sleep 2
+    if pgrep -f 'python3 bot.py' >/dev/null 2>&1; then
+      echo "Бот запущен"
+    else
+      echo "ВНИМАНИЕ: бот не стартовал, смотрите logs/bot.log"
+      tail -n 30 logs/bot.log || true
+    fi
   fi
 fi
 ENDSSH

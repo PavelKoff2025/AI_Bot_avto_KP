@@ -27,6 +27,7 @@ import os
 from utils.combined_document import build_combined_document
 from utils.config import (
     DEFAULT_CLIENT_NAME,
+    apply_outbound_proxy_env,
     sanitize_client_name,
     telegram_allowed_ids,
 )
@@ -36,8 +37,13 @@ from utils.package_builder import build_manager_package
 from utils.sufficiency import check_transcription_sufficiency, format_sufficiency_message
 
 load_dotenv()
+# Подхватить корневой .env, если бот стартует не из корня
+load_dotenv(Path(__file__).resolve().parent / ".env")
+_proxy = apply_outbound_proxy_env()
 setup_logging()
 logger = get_logger("bot")
+if _proxy:
+    logger.info("OpenAI/outbound proxy: %s", _proxy.split("@")[-1])
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 

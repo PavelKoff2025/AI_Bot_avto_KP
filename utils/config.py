@@ -57,6 +57,40 @@ def flask_api_token() -> str:
     return os.getenv("FLASK_API_TOKEN", "").strip()
 
 
+def openai_proxy_url() -> str | None:
+    """
+    Прокси для OpenAI (и при желании для всего исходящего HTTPS).
+    Приоритет: OPENAI_PROXY → HTTPS_PROXY → HTTP_PROXY → ALL_PROXY.
+    Примеры: http://user:pass@host:8080  |  socks5://127.0.0.1:1080
+    """
+    for key in ("OPENAI_PROXY", "HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY"):
+        value = os.getenv(key, "").strip()
+        if value:
+            return value
+    return None
+
+
+def apply_outbound_proxy_env() -> str | None:
+    """
+    Пробрасывает OPENAI_PROXY в HTTPS_PROXY/HTTP_PROXY, если те пусты.
+    Вызывать рано при старте CRM/бота — urllib/httpx подхватят сами.
+    """
+    proxy = openai_proxy_url()
+    if not proxy:
+        return None
+    os.environ.setdefault("HTTPS_PROXY", proxy)
+    os.environ.setdefault("HTTP_PROXY", proxy)
+    # Не проксируем локальные сервисы CRM
+    no_proxy = os.getenv("NO_PROXY", "").strip()
+    extras = "127.0.0.1,localhost"
+    if no_proxy:
+        if "127.0.0.1" not in no_proxy:
+            os.environ["NO_PROXY"] = f"{no_proxy},{extras}"
+    else:
+        os.environ["NO_PROXY"] = extras
+    return proxy
+
+
 def sanitize_client_name(name: str | None, fallback: str = DEFAULT_CLIENT_NAME) -> str:
     value = (name or "").strip()
     if not value or value.lower() in {"не указано", "none", "null", "-"}:

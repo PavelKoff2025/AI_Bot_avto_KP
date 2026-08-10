@@ -14,6 +14,15 @@ _WEB_DIR = Path(__file__).resolve().parent
 load_dotenv(_WEB_DIR.parent / '.env')
 load_dotenv(_WEB_DIR / '.env')
 
+try:
+    from utils.config import apply_outbound_proxy_env
+
+    _proxy = apply_outbound_proxy_env()
+    if _proxy:
+        print(f'OpenAI/outbound proxy: {_proxy.split("@")[-1]}')
+except Exception:
+    pass
+
 from routes_deals import deals_bp
 from routes_admin import admin_bp
 from db_utils import connect_db

@@ -1,0 +1,26 @@
+[Unit]
+Description=Дом-Мастер CRM (Flask/Waitress :5001)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/AI_Bot_avto_KP/web_app
+EnvironmentFile=-/root/AI_Bot_avto_KP/.env
+EnvironmentFile=-/root/AI_Bot_avto_KP/web_app/.env
+Environment=PYTHONUNBUFFERED=1
+# Подхватываем utils/ из корня репозитория
+Environment=PYTHONPATH=/root/AI_Bot_avto_KP
+ExecStart=/usr/bin/python3 /root/AI_Bot_avto_KP/web_app/app.py
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+
+# Логи в journald + файлы приложения (app сам пишет в logs/app.log если nohup;
+# при systemd удобнее journalctl -u dommaster-crm)
+StandardOutput=append:/root/AI_Bot_avto_KP/logs/app.log
+StandardError=append:/root/AI_Bot_avto_KP/logs/app.log
+
+[Install]
+WantedBy=multi-user.target
