@@ -229,6 +229,28 @@ else
   exit 1
 fi
 
+# Telegram API с этого VPS: основной A-record часто недоступен.
+# Пин рабочего DC (см. scripts/fix_telegram_access.sh). TELEGRAM_API_IP можно задать локально.
+TG_IP='${TELEGRAM_API_IP:-149.154.167.220}'
+if [[ ! -s /etc/hosts ]]; then
+  cat > /etc/hosts <<'"'"'HOSTS'"'"'
+127.0.0.1       localhost
+127.0.1.1       cv7802191.novalocal cv7802191
+::1             localhost ip6-localhost ip6-loopback
+ff02::1         ip6-allnodes
+ff02::2         ip6-allrouters
+HOSTS
+fi
+tmp_hosts="\$(mktemp)"
+grep -vE '"'"'[[:space:]]api\.telegram\.org([[:space:]]|$)'"'"' /etc/hosts > "\$tmp_hosts" || true
+printf '"'"'%s api.telegram.org\n'"'"' "\$TG_IP" >> "\$tmp_hosts"
+cat "\$tmp_hosts" > /etc/hosts
+rm -f "\$tmp_hosts"
+if [[ -f /etc/gai.conf ]] && ! grep -qE '"'"'^precedence ::ffff:0:0/96[[:space:]]+100'"'"' /etc/gai.conf; then
+  echo '"'"'precedence ::ffff:0:0/96  100'"'"' >> /etc/gai.conf
+fi
+echo "Telegram pin: \$(getent hosts api.telegram.org | head -1 || true)"
+
 # Telegram-бот: нужен для deep-link привязки chat_id клиентов
 cd '${REMOTE_PATH}'
 if [[ -f bot.py ]]; then
@@ -236,7 +258,7 @@ if [[ -f bot.py ]]; then
   pkill -f 'python3 bot.py' 2>/dev/null || true
   pkill -f 'python3 .*bot.py' 2>/dev/null || true
   sleep 1
-  nohup python3 bot.py > logs/bot.log 2>&1 &
+  nohup python3 bot.py >> logs/bot.log 2>&1 &
   sleep 2
   if pgrep -f 'python3 bot.py' >/dev/null 2>&1; then
     echo "Бот запущен"
