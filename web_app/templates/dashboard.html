@@ -12,6 +12,10 @@
     {%- endif -%}
 {%- endmacro %}
 
+{% set sc = stats.status_counts if stats else {} %}
+{% set funnel = stats.funnel if stats else {} %}
+{% set chart = stats.chart if stats else {'labels': [], 'counts': []} %}
+
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <h2 class="mb-0"><i class="bi bi-speedometer2"></i> Дашборд</h2>
     <div class="d-flex flex-wrap gap-2">
@@ -24,60 +28,127 @@
     </div>
 </div>
 
-{% set new_count = deals|selectattr('status', 'equalto', 'new')|list|length %}
-{% set incomplete_count = deals|selectattr('status', 'equalto', 'incomplete')|list|length %}
-{% set ready_count = deals|selectattr('status', 'equalto', 'kp_ready')|list|length %}
-{% set sent_count = deals|selectattr('status', 'equalto', 'kp_sent')|list|length %}
-{% set won_count = deals|selectattr('status', 'equalto', 'completed')|list|length %}
-
 <div class="row g-3 mb-4">
-    <div class="col-6 col-md">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-body">
-                <div class="text-muted small">Всего</div>
-                <div class="fs-3 fw-bold">{{ deals|length }}</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md">
+    <div class="col-6 col-lg-3">
         <div class="card border-0 shadow-sm h-100 border-start border-primary border-4">
             <div class="card-body">
-                <div class="text-muted small">Новые</div>
-                <div class="fs-3 fw-bold text-primary">{{ new_count }}</div>
+                <div class="text-muted small">Сделки в работе</div>
+                <div class="fs-3 fw-bold text-primary">{{ stats.in_progress if stats else 0 }}</div>
+                <div class="small text-muted">из {{ stats.total if stats else deals|length }} всего</div>
             </div>
         </div>
     </div>
-    <div class="col-6 col-md">
-        <div class="card border-0 shadow-sm h-100 border-start border-warning border-4">
-            <div class="card-body">
-                <div class="text-muted small">Неполные</div>
-                <div class="fs-3 fw-bold text-warning">{{ incomplete_count }}</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md">
-        <div class="card border-0 shadow-sm h-100 border-start border-info border-4">
-            <div class="card-body">
-                <div class="text-muted small">КП готово</div>
-                <div class="fs-3 fw-bold text-info">{{ ready_count }}</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md">
-        <div class="card border-0 shadow-sm h-100 border-start border-primary border-4">
-            <div class="card-body">
-                <div class="text-muted small">КП отправлено</div>
-                <div class="fs-3 fw-bold text-primary">{{ sent_count }}</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md">
+    <div class="col-6 col-lg-3">
         <div class="card border-0 shadow-sm h-100 border-start border-success border-4">
             <div class="card-body">
-                <div class="text-muted small">Завершено</div>
-                <div class="fs-3 fw-bold text-success">{{ won_count }}</div>
+                <div class="text-muted small">Средний чек (ТК)</div>
+                <div class="fs-4 fw-bold text-success">{{ stats.avg_check_fmt if stats else '—' }}</div>
+                <div class="small text-muted">по сделкам с площадью</div>
             </div>
         </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card border-0 shadow-sm h-100 border-start border-info border-4">
+            <div class="card-body">
+                <div class="text-muted small">Конверсия в КП</div>
+                <div class="fs-3 fw-bold text-info">{{ funnel.call_to_kp_pct or 0 }}%</div>
+                <div class="small text-muted">{{ funnel.kp or 0 }} из {{ funnel.calls or 0 }} звонков</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card border-0 shadow-sm h-100 border-start border-warning border-4">
+            <div class="card-body">
+                <div class="text-muted small">Конверсия в отправку</div>
+                <div class="fs-3 fw-bold text-warning">{{ funnel.call_to_sent_pct or 0 }}%</div>
+                <div class="small text-muted">{{ funnel.sent or 0 }} отправлено клиенту</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-lg-5">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white"><h5 class="mb-0">Воронка: звонок → КП → отправка</h5></div>
+            <div class="card-body">
+                {% set steps = [
+                    ('Звонки / сделки', funnel.calls or 0, 100),
+                    ('КП сформировано', funnel.kp or 0, funnel.call_to_kp_pct or 0),
+                    ('КП отправлено', funnel.sent or 0, funnel.call_to_sent_pct or 0),
+                    ('Завершено', funnel.completed or 0, funnel.sent_to_done_pct or 0),
+                ] %}
+                {% for title, value, rate in steps %}
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between small mb-1">
+                        <span>{{ title }}</span>
+                        <span class="fw-semibold">{{ value }}{% if not loop.first %} · {{ rate }}%{% endif %}</span>
+                    </div>
+                    {% set width = 100 if (funnel.calls or 0) == 0 else ((value * 100) / (funnel.calls or 1)) %}
+                    <div class="progress" style="height: 12px;">
+                        <div class="progress-bar {% if loop.index == 1 %}bg-secondary{% elif loop.index == 2 %}bg-info{% elif loop.index == 3 %}bg-warning{% else %}bg-success{% endif %}"
+                             style="width: {{ width }}%;"></div>
+                    </div>
+                </div>
+                {% endfor %}
+                <div class="small text-muted mt-2">
+                    КП → отправка: <strong>{{ funnel.kp_to_sent_pct or 0 }}%</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-7">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Новые сделки по дням</h5>
+                <span class="text-muted small">14 дней</span>
+            </div>
+            <div class="card-body">
+                <canvas id="dealsChart" height="120" aria-label="График сделок по дням"></canvas>
+                {% if not chart.counts or (chart.counts|sum) == 0 %}
+                <p class="text-muted small text-center mt-2 mb-0">За последние 14 дней новых сделок не было</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-4 col-md">
+        <div class="card border-0 shadow-sm h-100"><div class="card-body py-3">
+            <div class="text-muted small">Новые</div>
+            <div class="fs-4 fw-bold">{{ sc.new or 0 }}</div>
+        </div></div>
+    </div>
+    <div class="col-4 col-md">
+        <div class="card border-0 shadow-sm h-100"><div class="card-body py-3">
+            <div class="text-muted small">Неполные</div>
+            <div class="fs-4 fw-bold text-warning">{{ sc.incomplete or 0 }}</div>
+        </div></div>
+    </div>
+    <div class="col-4 col-md">
+        <div class="card border-0 shadow-sm h-100"><div class="card-body py-3">
+            <div class="text-muted small">КП готово</div>
+            <div class="fs-4 fw-bold text-info">{{ sc.kp_ready or 0 }}</div>
+        </div></div>
+    </div>
+    <div class="col-4 col-md">
+        <div class="card border-0 shadow-sm h-100"><div class="card-body py-3">
+            <div class="text-muted small">Отправлено</div>
+            <div class="fs-4 fw-bold text-primary">{{ sc.kp_sent or 0 }}</div>
+        </div></div>
+    </div>
+    <div class="col-4 col-md">
+        <div class="card border-0 shadow-sm h-100"><div class="card-body py-3">
+            <div class="text-muted small">Завершено</div>
+            <div class="fs-4 fw-bold text-success">{{ sc.completed or 0 }}</div>
+        </div></div>
+    </div>
+    <div class="col-4 col-md">
+        <div class="card border-0 shadow-sm h-100"><div class="card-body py-3">
+            <div class="text-muted small">Проиграно</div>
+            <div class="fs-4 fw-bold text-danger">{{ sc.lost or 0 }}</div>
+        </div></div>
     </div>
 </div>
 
@@ -156,4 +227,43 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+    const labels = {{ chart.labels|tojson }};
+    const values = {{ chart.counts|tojson }};
+    const canvas = document.getElementById('dealsChart');
+    if (!canvas || typeof Chart === 'undefined') return;
+    new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Новые сделки',
+                data: values,
+                backgroundColor: 'rgba(13, 110, 253, 0.55)',
+                borderColor: 'rgba(13, 110, 253, 1)',
+                borderWidth: 1,
+                borderRadius: 4,
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { display: false },
+                tooltip: { callbacks: { title: (items) => items[0] ? items[0].label : '' } }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { stepSize: 1, precision: 0 }
+                }
+            }
+        }
+    });
+})();
+</script>
 {% endblock %}

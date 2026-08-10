@@ -412,6 +412,12 @@ def deal_detail(deal_id):
     chat_ready = bool(resolve_deal_chat_id(deal))
     bind_link = client_bind_link(deal["id"]) if not chat_ready else None
 
+    from analytics import collect_deal_files
+
+    tab = (request.args.get("tab") or "main").strip().lower()
+    if tab not in {"main", "kp", "history", "files"}:
+        tab = "main"
+
     return render_template(
         'deals/view.html',
         deal=deal,
@@ -426,6 +432,8 @@ def deal_detail(deal_id):
         timeline=timeline,
         deal_statuses=DEAL_STATUSES,
         status_labels=STATUS_LABELS,
+        deal_files=collect_deal_files(deal, kp_meta),
+        active_tab=tab,
     )
 
 @deals_bp.route('/<int:deal_id>/incomplete')

@@ -161,19 +161,23 @@ def logout():
 @app.route('/dashboard')
 @login_required
 def dashboard():
+    from analytics import build_dashboard_stats
+
     conn = get_db()
     rows = conn.execute('''
         SELECT * FROM deals 
         WHERE user_id = ? OR user_id IS NULL
         ORDER BY created_at DESC
-        LIMIT 50
     ''', (session['user_id'],)).fetchall()
     conn.close()
     deals = [_deal_with_etalon(row) for row in rows]
-    
-    return render_template('dashboard.html', 
+    stats = build_dashboard_stats(deals)
+
+    return render_template(
+        'dashboard.html',
         username=session.get('user_name') or session.get('username'),
-        deals=deals
+        deals=deals,
+        stats=stats,
     )
 
 @app.route('/deal/<int:deal_id>')
