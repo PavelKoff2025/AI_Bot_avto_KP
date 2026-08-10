@@ -51,10 +51,10 @@
                     <label class="form-label">Статус</label>
                     <select name="status" class="form-select">
                         <option value="new" {% if deal.status == 'new' %}selected{% endif %}>Новая</option>
-                        <option value="sent" {% if deal.status == 'sent' %}selected{% endif %}>Отправлено</option>
-                        <option value="answered" {% if deal.status == 'answered' %}selected{% endif %}>Ответ получен</option>
-                        <option value="stalled" {% if deal.status == 'stalled' %}selected{% endif %}>Зависла</option>
-                        <option value="won" {% if deal.status == 'won' %}selected{% endif %}>Выиграна</option>
+                        <option value="incomplete" {% if deal.status == 'incomplete' %}selected{% endif %}>Неполные данные</option>
+                        <option value="kp_ready" {% if deal.status == 'kp_ready' %}selected{% endif %}>КП готово</option>
+                        <option value="kp_sent" {% if deal.status == 'kp_sent' %}selected{% endif %}>КП отправлено</option>
+                        <option value="completed" {% if deal.status == 'completed' %}selected{% endif %}>Завершена</option>
                         <option value="lost" {% if deal.status == 'lost' %}selected{% endif %}>Проиграна</option>
                     </select>
                 </div>

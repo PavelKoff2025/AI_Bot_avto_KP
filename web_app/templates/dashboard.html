@@ -25,9 +25,10 @@
 </div>
 
 {% set new_count = deals|selectattr('status', 'equalto', 'new')|list|length %}
-{% set sent_count = deals|selectattr('status', 'equalto', 'sent')|list|length %}
-{% set won_count = deals|selectattr('status', 'equalto', 'won')|list|length %}
-{% set stalled_count = deals|selectattr('status', 'equalto', 'stalled')|list|length %}
+{% set incomplete_count = deals|selectattr('status', 'equalto', 'incomplete')|list|length %}
+{% set ready_count = deals|selectattr('status', 'equalto', 'kp_ready')|list|length %}
+{% set sent_count = deals|selectattr('status', 'equalto', 'kp_sent')|list|length %}
+{% set won_count = deals|selectattr('status', 'equalto', 'completed')|list|length %}
 
 <div class="row g-3 mb-4">
     <div class="col-6 col-md">
@@ -49,24 +50,32 @@
     <div class="col-6 col-md">
         <div class="card border-0 shadow-sm h-100 border-start border-warning border-4">
             <div class="card-body">
-                <div class="text-muted small">Отправлено</div>
-                <div class="fs-3 fw-bold text-warning">{{ sent_count }}</div>
+                <div class="text-muted small">Неполные</div>
+                <div class="fs-3 fw-bold text-warning">{{ incomplete_count }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md">
+        <div class="card border-0 shadow-sm h-100 border-start border-info border-4">
+            <div class="card-body">
+                <div class="text-muted small">КП готово</div>
+                <div class="fs-3 fw-bold text-info">{{ ready_count }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md">
+        <div class="card border-0 shadow-sm h-100 border-start border-primary border-4">
+            <div class="card-body">
+                <div class="text-muted small">КП отправлено</div>
+                <div class="fs-3 fw-bold text-primary">{{ sent_count }}</div>
             </div>
         </div>
     </div>
     <div class="col-6 col-md">
         <div class="card border-0 shadow-sm h-100 border-start border-success border-4">
             <div class="card-body">
-                <div class="text-muted small">Выиграно</div>
+                <div class="text-muted small">Завершено</div>
                 <div class="fs-3 fw-bold text-success">{{ won_count }}</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md">
-        <div class="card border-0 shadow-sm h-100 border-start border-secondary border-4">
-            <div class="card-body">
-                <div class="text-muted small">Зависло</div>
-                <div class="fs-3 fw-bold">{{ stalled_count }}</div>
             </div>
         </div>
     </div>
@@ -123,11 +132,12 @@
                         <td>
                             {% set st = deal.status or 'new' %}
                             <span class="badge rounded-pill
-                                {% if st == 'new' %}text-bg-primary
-                                {% elif st == 'sent' %}text-bg-warning
-                                {% elif st == 'won' %}text-bg-success
+                                {% if st == 'completed' %}text-bg-success
+                                {% elif st == 'kp_sent' %}text-bg-info
+                                {% elif st == 'kp_ready' %}text-bg-primary
+                                {% elif st == 'incomplete' %}text-bg-warning text-dark
                                 {% elif st == 'lost' %}text-bg-danger
-                                {% else %}text-bg-secondary{% endif %}">{{ st }}</span>
+                                {% else %}text-bg-secondary{% endif %}">{{ deal.status_label or st }}</span>
                         </td>
                         <td>{{ deal.created_at[:10] if deal.created_at else '—' }}</td>
                         <td>

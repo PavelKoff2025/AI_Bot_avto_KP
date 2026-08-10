@@ -100,7 +100,11 @@ def init_db():
 
 
 def _deal_with_etalon(row: sqlite3.Row) -> dict:
+    from models import normalize_status, status_label
+
     deal = dict(row)
+    deal["status"] = normalize_status(deal.get("status"))
+    deal["status_label"] = status_label(deal["status"])
     match = etalon_match_score(deal)
     deal["etalon_score"] = match["score"]
     deal["etalon_grade"] = match["grade"]

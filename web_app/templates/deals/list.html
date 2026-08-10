@@ -44,10 +44,10 @@
                 <select name="status" class="form-select">
                     <option value="" {% if not status_filter %}selected{% endif %}>Все</option>
                     <option value="new" {% if status_filter == 'new' %}selected{% endif %}>Новая</option>
-                    <option value="sent" {% if status_filter == 'sent' %}selected{% endif %}>Отправлено</option>
-                    <option value="answered" {% if status_filter == 'answered' %}selected{% endif %}>Ответ получен</option>
-                    <option value="stalled" {% if status_filter == 'stalled' %}selected{% endif %}>Зависла</option>
-                    <option value="won" {% if status_filter == 'won' %}selected{% endif %}>Выиграна</option>
+                    <option value="incomplete" {% if status_filter == 'incomplete' %}selected{% endif %}>Неполные данные</option>
+                    <option value="kp_ready" {% if status_filter == 'kp_ready' %}selected{% endif %}>КП готово</option>
+                    <option value="kp_sent" {% if status_filter == 'kp_sent' %}selected{% endif %}>КП отправлено</option>
+                    <option value="completed" {% if status_filter == 'completed' %}selected{% endif %}>Завершена</option>
                     <option value="lost" {% if status_filter == 'lost' %}selected{% endif %}>Проиграна</option>
                 </select>
             </div>
@@ -180,7 +180,7 @@
                                 <span class="badge text-bg-warning text-dark">Неполные</span>
                             {% endif %}
                         </td>
-                        <td><span class="badge text-bg-light text-dark border">{{ deal.status }}</span></td>
+                        <td><span class="badge text-bg-light text-dark border">{{ deal.status_label or deal.status }}</span></td>
                         <td>{{ deal.created_at[:10] if deal.created_at else '—' }}</td>
                         <td>
                             <div class="btn-group btn-group-sm">

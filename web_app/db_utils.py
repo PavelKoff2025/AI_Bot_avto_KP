@@ -41,6 +41,14 @@ def ensure_deal_columns(conn: sqlite3.Connection) -> None:
     except Exception:
         pass
 
+    try:
+        from models import ensure_action_log_table, migrate_deal_statuses
+
+        ensure_action_log_table(conn)
+        migrate_deal_statuses(conn)
+    except Exception:
+        pass
+
 
 def connect_db(path: str = "deals.db") -> sqlite3.Connection:
     conn = sqlite3.connect(path)

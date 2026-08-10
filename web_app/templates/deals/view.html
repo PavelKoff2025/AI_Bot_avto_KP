@@ -86,12 +86,13 @@
                         <th>Статус</th>
                         <td>
                             <span class="badge
-                                {% if deal.status == 'won' %}text-bg-success
-                                {% elif deal.status == 'sent' or deal.status == 'answered' %}text-bg-info
+                                {% if deal.status == 'completed' %}text-bg-success
+                                {% elif deal.status == 'kp_sent' %}text-bg-info
+                                {% elif deal.status == 'kp_ready' %}text-bg-primary
                                 {% elif deal.status == 'lost' %}text-bg-danger
-                                {% elif deal.status == 'stalled' %}text-bg-warning text-dark
+                                {% elif deal.status == 'incomplete' %}text-bg-warning text-dark
                                 {% else %}text-bg-secondary{% endif %}">
-                                {{ deal.status }}
+                                {{ deal.status_label or deal.status }}
                             </span>
                         </td>
                     </tr>
@@ -350,10 +351,12 @@
             <div class="card-body">
                 <p class="mb-3">{{ deal.notes or '—' }}</p>
                 <div class="d-flex flex-wrap gap-2">
-                    <button class="btn btn-outline-warning btn-sm" type="button" onclick="updateStatus('sent')">Отправлено</button>
-                    <button class="btn btn-outline-success btn-sm" type="button" onclick="updateStatus('won')">Выиграна</button>
+                    <button class="btn btn-outline-secondary btn-sm" type="button" onclick="updateStatus('new')">Новая</button>
+                    <button class="btn btn-outline-warning btn-sm" type="button" onclick="updateStatus('incomplete')">Неполные данные</button>
+                    <button class="btn btn-outline-primary btn-sm" type="button" onclick="updateStatus('kp_ready')">КП готово</button>
+                    <button class="btn btn-outline-info btn-sm" type="button" onclick="updateStatus('kp_sent')">КП отправлено</button>
+                    <button class="btn btn-outline-success btn-sm" type="button" onclick="updateStatus('completed')">Завершена</button>
                     <button class="btn btn-outline-danger btn-sm" type="button" onclick="updateStatus('lost')">Проиграна</button>
-                    <button class="btn btn-outline-secondary btn-sm" type="button" onclick="updateStatus('stalled')">Зависла</button>
                 </div>
             </div>
         </div>
@@ -363,9 +366,32 @@
 <div class="row mt-4">
     <div class="col-12">
         <div class="card shadow-sm">
-            <div class="card-header"><h5 class="mb-0">История действий</h5></div>
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">История действий</h5>
+                <span class="badge text-bg-light text-dark border">{{ timeline|length if timeline else 0 }}</span>
+            </div>
             <div class="card-body">
-                <p class="text-muted text-center py-4 mb-0">История действий будет отображаться здесь</p>
+                {% if timeline %}
+                <div class="list-group list-group-flush">
+                    {% for item in timeline %}
+                    <div class="list-group-item px-0">
+                        <div class="d-flex justify-content-between gap-3 flex-wrap">
+                            <div>
+                                <strong>{{ item.action_label }}</strong>
+                                {% if item.detail %}
+                                <div class="small text-muted">{{ item.detail }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="small text-muted text-nowrap">
+                                {{ item.created_at[:16] if item.created_at else '—' }}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-muted text-center py-4 mb-0">Пока нет записей — действия появятся после правок, генерации и отправки КП</p>
+                {% endif %}
             </div>
         </div>
     </div>

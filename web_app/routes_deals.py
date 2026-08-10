@@ -23,6 +23,17 @@ from transcript_parser_local import validate_against_etalon
 from etalon_score import etalon_match_score, KP_THRESHOLD, ETALON_FIELDS, FIELD_QUESTIONS
 from db_utils import connect_db
 from pricing import apply_tk_cost, calc_tk_cost
+from models import (
+    DEAL_STATUSES,
+    STATUS_LABELS,
+    list_actions,
+    log_action,
+    normalize_status,
+    status_after_etalon,
+    status_after_kp_ready,
+    status_after_kp_sent,
+    status_label,
+)
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -32,6 +43,10 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 deals_bp = Blueprint('deals', __name__, url_prefix='/deals')
+
+
+def _actor_id():
+    return session.get('user_id')
 
 
 def _parse_kp_options(raw) -> dict | None:
@@ -83,6 +98,8 @@ def get_db():
 
 def _deal_with_etalon(row: sqlite3.Row) -> dict:
     deal = dict(row)
+    deal["status"] = normalize_status(deal.get("status"))
+    deal["status_label"] = status_label(deal["status"])
     match = etalon_match_score(deal)
     deal["etalon_score"] = match["score"]
     deal["etalon_grade"] = match["grade"]
@@ -93,6 +110,17 @@ def _deal_with_etalon(row: sqlite3.Row) -> dict:
     deal["etalon_threshold"] = match["threshold"]
     apply_tk_cost(deal)
     return deal
+
+
+def _maybe_run_reminders(conn: sqlite3.Connection, *, notify: bool = True) -> dict | None:
+    """Тихая проверка зависших сделок (с cooldown на уровне сделок)."""
+    try:
+        from utils.reminders import process_reminders
+
+        return process_reminders(conn, notify=notify)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("reminders skipped: %s", exc)
+        return None
 
 @deals_bp.route('/')
 @login_required
@@ -111,11 +139,20 @@ def list_deals():
         'SELECT * FROM deals WHERE user_id = ? OR user_id IS NULL ORDER BY created_at DESC',
         (session['user_id'],),
     ).fetchall()
+    reminder_info = _maybe_run_reminders(conn, notify=True)
     conn.close()
+
+    if reminder_info and reminder_info.get('due'):
+        flash(
+            f"Напоминание: {reminder_info['due']} сделок без действий > 3 дней"
+            + (f" (Telegram: {reminder_info.get('notified', 0)})" if reminder_info.get('notified') else ''),
+            'warning',
+        )
 
     deals = [_deal_with_etalon(row) for row in rows]
 
     if status_filter:
+        status_filter = normalize_status(status_filter)
         deals = [d for d in deals if (d.get('status') or '') == status_filter]
 
     if completion_status == 'high':
@@ -186,6 +223,8 @@ def list_deals():
         search=search,
         stats=stats,
         pagination=pagination,
+        deal_statuses=DEAL_STATUSES,
+        status_labels=STATUS_LABELS,
     )
 
 @deals_bp.route('/new', methods=['GET', 'POST'])
@@ -255,6 +294,9 @@ def new_deal():
         timeline = parsed_data.get('timeline')
         funding_source = parsed_data.get('funding_source')
         tk_cost = calc_tk_cost(area)
+        initial_status = status_after_etalon(
+            can_generate_kp=bool(validation.get('can_generate_kp')),
+        )
 
         conn = get_db()
         cursor = conn.cursor()
@@ -266,10 +308,17 @@ def new_deal():
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             client_name, client_phone, client_email, client_telegram,
-            transcript, notes, session['user_id'], 'new',
+            transcript, notes, session['user_id'], initial_status,
             plot, budget, area, material, timeline, funding_source, tk_cost
         ))
         deal_id = cursor.lastrowid
+        log_action(
+            conn,
+            deal_id=deal_id,
+            action='created',
+            detail=f'Статус: {status_label(initial_status)}; эталон {validation.get("score", 0)}%',
+            user_id=_actor_id(),
+        )
         conn.commit()
         conn.close()
 
@@ -305,12 +354,14 @@ def new_deal():
 def deal_detail(deal_id):
     conn = get_db()
     row = conn.execute('SELECT * FROM deals WHERE id = ?', (deal_id,)).fetchone()
-    conn.close()
     if not row:
+        conn.close()
         flash('Сделка не найдена', 'error')
         return redirect(url_for('deals.list_deals'))
 
     deal = _deal_with_etalon(row)
+    timeline = list_actions(conn, deal_id, limit=80)
+    conn.close()
 
     # data для шаблона: алиасы парсера + % заполнения (порог КП)
     data = {
@@ -372,6 +423,9 @@ def deal_detail(deal_id):
         telegram_ready=telegram_configured(),
         telegram_chat_ready=chat_ready,
         telegram_bind_link=bind_link,
+        timeline=timeline,
+        deal_statuses=DEAL_STATUSES,
+        status_labels=STATUS_LABELS,
     )
 
 @deals_bp.route('/<int:deal_id>/incomplete')
@@ -485,6 +539,37 @@ def edit_deal(deal_id):
 
         try:
             tk_cost = calc_tk_cost(area)
+            draft = {
+                'client_phone': client_phone,
+                'client_email': client_email,
+                'plot': plot,
+                'area': area,
+                'material': material,
+                'timeline': timeline,
+                'funding_source': funding_source,
+            }
+            match_preview = etalon_match_score(draft)
+            requested_status = normalize_status(status)
+            # Ручной completed/lost / явный выбор пайплайна; иначе авто по эталону
+            if requested_status in ('completed', 'lost'):
+                new_status = requested_status
+            elif requested_status in ('new', 'incomplete', 'kp_ready'):
+                # не даём kp_ready при дырявом эталоне
+                if requested_status == 'kp_ready' and not match_preview['can_generate_kp']:
+                    new_status = 'incomplete'
+                elif requested_status in ('new', 'incomplete'):
+                    new_status = status_after_etalon(
+                        can_generate_kp=match_preview['can_generate_kp'],
+                        current=requested_status,
+                    )
+                else:
+                    new_status = requested_status
+            else:
+                new_status = status_after_etalon(
+                    can_generate_kp=match_preview['can_generate_kp'],
+                    current=deal.get('status'),
+                )
+
             conn = get_db()
             conn.execute(
                 '''
@@ -497,12 +582,27 @@ def edit_deal(deal_id):
                 ''',
                 (
                     client_name, client_phone, client_email, client_telegram,
-                    transcript, notes, status,
+                    transcript, notes, new_status,
                     plot, budget, area, material, timeline, funding_source,
                     tk_cost,
                     deal_id,
                 ),
             )
+            log_action(
+                conn,
+                deal_id=deal_id,
+                action='updated',
+                detail=f'Эталон {match_preview["score"]}%; статус {status_label(new_status)}',
+                user_id=_actor_id(),
+            )
+            if normalize_status(deal.get('status')) != new_status:
+                log_action(
+                    conn,
+                    deal_id=deal_id,
+                    action='status_changed',
+                    detail=f'{status_label(deal.get("status"))} → {status_label(new_status)}',
+                    user_id=_actor_id(),
+                )
             conn.commit()
             updated = conn.execute('SELECT * FROM deals WHERE id = ?', (deal_id,)).fetchone()
             conn.close()
@@ -533,6 +633,8 @@ def edit_deal(deal_id):
         deal=deal,
         edit=True,
         kp_threshold=KP_THRESHOLD,
+        deal_statuses=DEAL_STATUSES,
+        status_labels=STATUS_LABELS,
     )
 
 @deals_bp.route('/<int:deal_id>/generate-kp', methods=['POST'])
@@ -598,10 +700,26 @@ def generate_kp(deal_id):
             'message': f'Не удалось сформировать КП: {exc}',
         }), 500
 
+    new_status = status_after_kp_ready(deal.get('status'))
     conn.execute(
-        'UPDATE deals SET kp_options = ?, status = CASE WHEN status = ? THEN ? ELSE status END WHERE id = ?',
-        (json.dumps(meta, ensure_ascii=False), 'new', 'kp_ready', deal_id),
+        'UPDATE deals SET kp_options = ?, status = ? WHERE id = ?',
+        (json.dumps(meta, ensure_ascii=False), new_status, deal_id),
     )
+    log_action(
+        conn,
+        deal_id=deal_id,
+        action='kp_generated',
+        detail=f'{meta.get("area_m2")} м² · {meta.get("total_fmt")} · {meta.get("watermark")}',
+        user_id=_actor_id(),
+    )
+    if normalize_status(deal.get('status')) != new_status:
+        log_action(
+            conn,
+            deal_id=deal_id,
+            action='status_changed',
+            detail=f'{status_label(deal.get("status"))} → {status_label(new_status)}',
+            user_id=_actor_id(),
+        )
     conn.commit()
     conn.close()
 
@@ -702,16 +820,32 @@ def telegram_outbox_ack(deal_id):
                 delivery_date = ?,
                 delivery_status = 'ok',
                 delivery_error = NULL,
-                status = CASE WHEN status IN ('approved', 'kp_ready', 'new') THEN 'sent' ELSE status END
+                status = CASE
+                    WHEN status IN ('approved', 'kp_ready', 'new', 'incomplete', 'sent')
+                    THEN 'kp_sent' ELSE status END
             WHERE id = ?
             ''',
             (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), deal_id),
+        )
+        log_action(
+            conn,
+            deal_id=deal_id,
+            action='kp_sent',
+            detail='telegram outbox ack',
+            user_id=None,
         )
     else:
         err = str(payload.get('error') or 'outbox send failed')
         conn.execute(
             'UPDATE deals SET delivery_status = ?, delivery_error = ? WHERE id = ?',
             ('error', err, deal_id),
+        )
+        log_action(
+            conn,
+            deal_id=deal_id,
+            action='kp_send_failed',
+            detail=err,
+            user_id=None,
         )
     conn.commit()
     conn.close()
@@ -757,6 +891,13 @@ def telegram_bind_api(deal_id):
             WHERE id = ?
             ''',
             (chat_id, new_client_tg, deal_id),
+        )
+        log_action(
+            conn,
+            deal_id=deal_id,
+            action='telegram_bound',
+            detail=f'chat_id={chat_id}' + (f' @{username}' if username else ''),
+            user_id=None,
         )
         conn.commit()
         return jsonify({
@@ -839,10 +980,26 @@ def approve_kp(deal_id):
         logger.exception('Ошибка утверждения КП #%s', deal_id)
         return jsonify({'status': 'error', 'message': str(exc)}), 500
 
+    new_status = status_after_kp_ready(deal.get('status'))
     conn.execute(
         'UPDATE deals SET kp_options = ?, status = ? WHERE id = ?',
-        (json.dumps(approved, ensure_ascii=False), 'approved', deal_id),
+        (json.dumps(approved, ensure_ascii=False), new_status, deal_id),
     )
+    log_action(
+        conn,
+        deal_id=deal_id,
+        action='kp_approved',
+        detail=approved.get('total_fmt'),
+        user_id=_actor_id(),
+    )
+    if normalize_status(deal.get('status')) != new_status:
+        log_action(
+            conn,
+            deal_id=deal_id,
+            action='status_changed',
+            detail=f'{status_label(deal.get("status"))} → {status_label(new_status)}',
+            user_id=_actor_id(),
+        )
     conn.commit()
     conn.close()
     return jsonify({
@@ -970,7 +1127,7 @@ def send_kp(deal_id):
     has_queue = any(r.get('method') == 'telegram_queued' for r in results)
 
     if results and not errors:
-        status = 'sent'
+        status = status_after_kp_sent(deal.get('status'))
         delivery_status = 'queued' if queued_only else 'ok'
         delivery_error = None
         if queued_only:
@@ -984,13 +1141,13 @@ def send_kp(deal_id):
             flash_msg = 'КП отправлено клиенту'
         http = 200
     elif results and errors:
-        status = 'sent'
+        status = status_after_kp_sent(deal.get('status'))
         delivery_status = 'partial'
         delivery_error = '; '.join(errors)
         flash_msg = 'Отправлено частично: ' + delivery_error
         http = 200
     else:
-        status = deal.get('status') or 'approved'
+        status = normalize_status(deal.get('status') or 'kp_ready')
         delivery_status = 'error'
         delivery_error = '; '.join(errors) or 'Не удалось отправить'
         flash_msg = delivery_error
@@ -1009,6 +1166,31 @@ def send_kp(deal_id):
         (status if results else status, method, now if results else deal.get('delivery_date'),
          delivery_status, delivery_error, deal_id),
     )
+    if results:
+        channels_txt = ', '.join(r.get('method', '?') for r in results)
+        log_action(
+            conn,
+            deal_id=deal_id,
+            action='kp_sent',
+            detail=f'{channels_txt}; {delivery_status}',
+            user_id=_actor_id(),
+        )
+        if normalize_status(deal.get('status')) != status:
+            log_action(
+                conn,
+                deal_id=deal_id,
+                action='status_changed',
+                detail=f'{status_label(deal.get("status"))} → {status_label(status)}',
+                user_id=_actor_id(),
+            )
+    else:
+        log_action(
+            conn,
+            deal_id=deal_id,
+            action='kp_send_failed',
+            detail=delivery_error,
+            user_id=_actor_id(),
+        )
     conn.commit()
     conn.close()
 
@@ -1024,11 +1206,35 @@ def send_kp(deal_id):
 @deals_bp.route('/<int:deal_id>/status', methods=['POST'])
 @login_required
 def update_status(deal_id):
-    status = request.json.get('status')
-    if not status:
-        return jsonify({'error': 'Статус не указан'}), 400
+    status = normalize_status((request.json or {}).get('status'))
+    if status not in DEAL_STATUSES:
+        return jsonify({'error': 'Неизвестный статус'}), 400
+
     conn = get_db()
+    row = conn.execute('SELECT status FROM deals WHERE id = ?', (deal_id,)).fetchone()
+    if not row:
+        conn.close()
+        return jsonify({'error': 'Сделка не найдена'}), 404
+
+    old = normalize_status(row['status'] if isinstance(row, sqlite3.Row) else row[0])
     conn.execute('UPDATE deals SET status = ? WHERE id = ?', (status, deal_id))
+    log_action(
+        conn,
+        deal_id=deal_id,
+        action='status_changed',
+        detail=f'{status_label(old)} → {status_label(status)}',
+        user_id=_actor_id(),
+    )
     conn.commit()
     conn.close()
-    return jsonify({'status': 'ok'})
+    return jsonify({'status': 'ok', 'deal_status': status, 'label': status_label(status)})
+
+
+@deals_bp.route('/reminders/run', methods=['POST'])
+@login_required
+def run_reminders():
+    """Ручной запуск проверки зависших сделок."""
+    conn = get_db()
+    info = _maybe_run_reminders(conn, notify=True) or {}
+    conn.close()
+    return jsonify({'ok': True, **{k: info.get(k) for k in ('stale_total', 'due', 'notified', 'errors')}})
