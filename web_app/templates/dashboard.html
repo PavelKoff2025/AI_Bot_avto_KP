@@ -12,9 +12,9 @@
     {%- endif -%}
 {%- endmacro %}
 
-{% set sc = stats.status_counts if stats else {} %}
-{% set funnel = stats.funnel if stats else {} %}
-{% set chart = stats.chart if stats else {'labels': [], 'counts': []} %}
+{% set sc = status_counts if status_counts is defined else (stats.status_counts if stats else {}) %}
+{% set funnel = funnel if funnel is defined else (stats.funnel if stats else {}) %}
+{% set chart = chart if chart is defined else (stats.chart if stats else {'labels': [], 'counts': []}) %}
 
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <h2 class="mb-0"><i class="bi bi-speedometer2"></i> Дашборд</h2>
@@ -233,8 +233,8 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
 (function () {
-    const labels = {{ chart.labels|tojson }};
-    const values = {{ chart.counts|tojson }};
+    const labels = {{ (chart.labels if chart is defined else [])|tojson }};
+    const values = {{ (chart.counts if chart is defined else [])|tojson }};
     const canvas = document.getElementById('dealsChart');
     if (!canvas || typeof Chart === 'undefined') return;
     new Chart(canvas, {

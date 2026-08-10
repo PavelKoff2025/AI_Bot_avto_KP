@@ -178,6 +178,9 @@ def dashboard():
         username=session.get('user_name') or session.get('username'),
         deals=deals,
         stats=stats,
+        chart=stats.get('chart') or {'labels': [], 'counts': []},
+        funnel=stats.get('funnel') or {},
+        status_counts=stats.get('status_counts') or {},
     )
 
 @app.route('/deal/<int:deal_id>')
