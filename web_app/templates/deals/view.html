@@ -569,17 +569,25 @@ function sendKp(dealId, channels) {
 }
 
 function generateKP(dealId) {
-    if (!confirm('Сгенерировать КП тёплого контура (41 000 ₽/м²) для сделки #' + dealId + '?')) return;
+    if (!confirm('Сгенерировать КП тёплого контура (41 000 ₽/м²) для сделки #' + dealId + '?\n\nМожет занять до 1–2 минут (AI через прокси).')) return;
     const btn = event && event.target ? event.target.closest('button') : null;
     if (btn) {
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Генерация…';
     }
-    fetch('/deals/' + dealId + '/generate-kp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ watermark: 'draft', use_ai: true })
-    })
+
+    function postGenerate(useAi) {
+        const controller = new AbortController();
+        const timer = setTimeout(function () { controller.abort(); }, 150000);
+        return fetch('/deals/' + dealId + '/generate-kp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ watermark: 'draft', use_ai: useAi }),
+            signal: controller.signal,
+        }).finally(function () { clearTimeout(timer); });
+    }
+
+    postGenerate(true)
     .then(async (response) => {
         const data = await response.json();
         if (!response.ok || data.status === 'error') {
@@ -591,9 +599,26 @@ function generateKP(dealId) {
         alert(data.message || 'КП готово');
         location.href = location.pathname + '?tab=kp';
     })
-    .catch((error) => {
-        alert('Ошибка: ' + error);
-        location.href = location.pathname + '?tab=kp';
+    .catch(async (error) => {
+        // Сеть до VPS часто рвёт длинный AI-запрос — fallback без OpenAI
+        console.warn('generate with AI failed, retry without AI', error);
+        if (btn) btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Быстрая генерация…';
+        try {
+            const response = await postGenerate(false);
+            const data = await response.json();
+            if (!response.ok || data.status === 'error') {
+                alert('Ошибка: ' + (data.message || String(error)));
+            } else {
+                alert((data.message || 'КП готово') + '\n\n(собрано без AI — сеть оборвала долгий запрос)');
+            }
+            location.href = location.pathname + '?tab=kp';
+        } catch (err2) {
+            alert(
+                'Не удалось связаться с сервером (Failed to fetch).\n' +
+                'Обновите страницу и нажмите ещё раз.\n\n' + err2
+            );
+            if (btn) location.href = location.pathname + '?tab=kp';
+        }
     });
 }
 

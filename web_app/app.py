@@ -213,6 +213,14 @@ if __name__ == '__main__':
         from waitress import serve
 
         print('Starting Waitress on 0.0.0.0:5001')
-        serve(app, host='0.0.0.0', port=5001, threads=8, channel_timeout=120)
+        # channel_timeout: генерация КП + OpenAI через прокси может занимать >60с
+        serve(
+            app,
+            host='0.0.0.0',
+            port=5001,
+            threads=8,
+            channel_timeout=180,
+            connection_limit=100,
+        )
     except ImportError:
         app.run(host='0.0.0.0', port=5001, debug=False, threaded=True)
