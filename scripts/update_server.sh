@@ -230,24 +230,22 @@ else
 fi
 
 # Telegram API с этого VPS: основной A-record часто недоступен.
-# Пин рабочего DC (см. scripts/fix_telegram_access.sh). TELEGRAM_API_IP можно задать локально.
-TG_IP='${TELEGRAM_API_IP:-149.154.167.220}'
-if [[ ! -s /etc/hosts ]]; then
-  cat > /etc/hosts <<'"'"'HOSTS'"'"'
-127.0.0.1       localhost
-127.0.1.1       cv7802191.novalocal cv7802191
-::1             localhost ip6-localhost ip6-loopback
-ff02::1         ip6-allnodes
-ff02::2         ip6-allrouters
-HOSTS
+# Пин рабочего DC (см. scripts/fix_telegram_access.sh).
+# Надёжный пин без вложенного heredoc:
+grep -vE '[[:space:]]api\.telegram\.org([[:space:]]|\$)' /etc/hosts > /tmp/hosts.tg 2>/dev/null || true
+if [[ ! -s /tmp/hosts.tg ]]; then
+  printf '%s\n' \
+    '127.0.0.1 localhost' \
+    '127.0.1.1 cv7802191.novalocal cv7802191' \
+    '::1 localhost ip6-localhost ip6-loopback' \
+    'ff02::1 ip6-allnodes' \
+    'ff02::2 ip6-allrouters' > /tmp/hosts.tg
 fi
-tmp_hosts="\$(mktemp)"
-grep -vE '"'"'[[:space:]]api\.telegram\.org([[:space:]]|$)'"'"' /etc/hosts > "\$tmp_hosts" || true
-printf '"'"'%s api.telegram.org\n'"'"' "\$TG_IP" >> "\$tmp_hosts"
-cat "\$tmp_hosts" > /etc/hosts
-rm -f "\$tmp_hosts"
-if [[ -f /etc/gai.conf ]] && ! grep -qE '"'"'^precedence ::ffff:0:0/96[[:space:]]+100'"'"' /etc/gai.conf; then
-  echo '"'"'precedence ::ffff:0:0/96  100'"'"' >> /etc/gai.conf
+printf '%s api.telegram.org\n' '${TELEGRAM_API_IP:-149.154.167.220}' >> /tmp/hosts.tg
+cat /tmp/hosts.tg > /etc/hosts
+rm -f /tmp/hosts.tg
+if [[ -f /etc/gai.conf ]] && ! grep -qE '^precedence ::ffff:0:0/96[[:space:]]+100' /etc/gai.conf; then
+  echo 'precedence ::ffff:0:0/96  100' >> /etc/gai.conf
 fi
 echo "Telegram pin: \$(getent hosts api.telegram.org | head -1 || true)"
 
