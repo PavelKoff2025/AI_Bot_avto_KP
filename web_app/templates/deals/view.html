@@ -7,7 +7,7 @@
 {% set ready = data.is_complete if data else deal.can_generate_kp %}
 {% set tab = active_tab or 'main' %}
 
-<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
     <h2 class="mb-0">
         <i class="bi bi-file-text"></i>
         Сделка #{{ deal.id }}{% if deal.client_name %}: {{ deal.client_name }}{% endif %}
@@ -21,7 +21,7 @@
             {{ deal.status_label or deal.status }}
         </span>
     </h2>
-    <div class="d-flex flex-wrap gap-2">
+    <div class="d-none d-md-flex flex-wrap gap-2">
         <a href="{{ url_for('deals.list_deals') }}" class="btn btn-secondary">
             <i class="bi bi-arrow-left"></i> Назад
         </a>
@@ -36,7 +36,7 @@
     </div>
 </div>
 
-<ul class="nav nav-tabs mb-3" id="dealTabs" role="tablist">
+<ul class="nav nav-tabs nav-tabs-scroll mb-3" id="dealTabs" role="tablist">
     <li class="nav-item" role="presentation">
         <button class="nav-link {% if tab == 'main' %}active{% endif %}" id="tab-main-btn"
                 data-bs-toggle="tab" data-bs-target="#tab-main" type="button" role="tab">
@@ -74,9 +74,9 @@
                 <div class="card shadow-sm h-100">
                     <div class="card-header"><h5 class="mb-0">Информация о клиенте</h5></div>
                     <div class="card-body">
-                        <table class="table mb-0">
+                        <table class="table deal-info-table mb-0">
                             <tr>
-                                <th style="width: 40%">Клиент</th>
+                                <th>Клиент</th>
                                 <td><strong>{{ deal.client_name or '—' }}</strong></td>
                             </tr>
                             <tr>
@@ -235,7 +235,7 @@
                     Этап «Стройка»: одно КП на тёплый контур —
                     <strong>{{ deal.area or 'площадь не указана' }}</strong> × 41&nbsp;000&nbsp;₽/м².
                 </p>
-                <button class="btn btn-success btn-lg" type="button" onclick="generateKP({{ deal.id }})">
+                <button class="btn btn-success btn-lg w-100 w-md-auto" type="button" onclick="generateKP({{ deal.id }})">
                     <i class="bi bi-file-pdf"></i>
                     {% if kp_meta %}Пересобрать КП{% else %}Сгенерировать КП{% endif %}
                 </button>
@@ -375,7 +375,28 @@
             <div class="card-header"><h5 class="mb-0">Файлы сделки</h5></div>
             <div class="card-body">
                 {% if deal_files %}
-                <div class="table-responsive">
+                {# Mobile cards #}
+                <div class="d-md-none">
+                    {% for f in deal_files %}
+                    <div class="deal-mobile-card mb-2">
+                        <div class="fw-semibold">{{ f.title }}</div>
+                        <div class="font-monospace small text-break">{{ f.name }}</div>
+                        <div class="text-muted small mb-2">{{ f.meta or '—' }}</div>
+                        {% if f.kind == 'kp' and f.download %}
+                        <button class="btn btn-sm btn-outline-success w-100" type="button"
+                                onclick="downloadKpPdf({{ deal.id }})">
+                            <i class="bi bi-download"></i> Скачать
+                        </button>
+                        {% elif f.kind == 'transcript' %}
+                        <button class="btn btn-sm btn-outline-secondary w-100" type="button"
+                                onclick="document.getElementById('tab-main-btn').click();">
+                            Открыть во вкладке
+                        </button>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="table-responsive d-none d-md-block">
                     <table class="table align-middle mb-0">
                         <thead>
                             <tr><th>Тип</th><th>Файл</th><th>Детали</th><th></th></tr>
@@ -413,6 +434,25 @@
         </div>
     </div>
 </div>
+
+{# Sticky actions on mobile #}
+<div class="deal-sticky-actions d-md-none d-flex gap-2">
+    <a href="{{ url_for('deals.list_deals') }}" class="btn btn-secondary btn-sm">
+        <i class="bi bi-arrow-left"></i>
+    </a>
+    <a href="{{ url_for('deals.edit_deal', deal_id=deal.id) }}" class="btn btn-primary btn-sm">
+        <i class="bi bi-pencil"></i> Править
+    </a>
+    {% if not ready %}
+    <a href="{{ url_for('deals.incomplete_data', deal_id=deal.id) }}" class="btn btn-warning btn-sm">
+        <i class="bi bi-list-check"></i> Пробелы
+    </a>
+    {% else %}
+    <button class="btn btn-success btn-sm" type="button" onclick="document.getElementById('tab-kp-btn').click();">
+        <i class="bi bi-file-pdf"></i> КП
+    </button>
+    {% endif %}
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -421,7 +461,7 @@ function copyBindLinkFrom(inputId) {
     const input = document.getElementById(inputId);
     const text = (input && input.value) ? input.value.trim() : '';
     if (!text || text.indexOf('t.me/') === -1) {
-        alert('Ссылка не найдена. Обновите страницу (Ctrl+Shift+R).');
+        DM.error('Ссылка не найдена. Обновите страницу (Ctrl+Shift+R).');
         return;
     }
     if (input) {
@@ -433,22 +473,19 @@ function copyBindLinkFrom(inputId) {
     try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
     if (!ok && navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(text).then(function () {
-            alert('Скопирована ссылка:\n' + text);
+            DM.success('Ссылка скопирована');
         }).catch(function () {
-            alert('Скопируйте вручную из поля:\n' + text);
+            DM.warning('Скопируйте вручную из поля');
         });
         return;
     }
-    alert(ok ? ('Скопирована ссылка:\n' + text) : ('Скопируйте вручную из поля:\n' + text));
+    if (ok) DM.success('Ссылка скопирована');
+    else DM.warning('Скопируйте вручную из поля');
 }
 
 function downloadKpPdf(dealId) {
     const btn = document.getElementById('btnDownloadKp');
-    const prev = btn ? btn.innerHTML : '';
-    if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Скачивание…';
-    }
+    DM.setBusy(btn, 'Скачивание…');
     fetch('/deals/' + dealId + '/kp.pdf', { credentials: 'same-origin' })
         .then(async (response) => {
             if (!response.ok) throw new Error('Сервер вернул ' + response.status);
@@ -461,47 +498,50 @@ function downloadKpPdf(dealId) {
             a.click();
             a.remove();
             URL.revokeObjectURL(url);
+            DM.success('PDF скачан');
         })
         .catch((error) => {
-            alert('Не удалось скачать PDF: ' + error + '\n\nОбновите страницу и нажмите ещё раз.');
+            DM.error('Не удалось скачать PDF: ' + error + '\nОбновите страницу и нажмите ещё раз.');
         })
         .finally(() => {
-            if (btn) {
-                btn.disabled = false;
-                btn.innerHTML = prev || '<i class="bi bi-download"></i> Скачать PDF';
-            }
+            DM.clearBusy(btn);
         });
 }
 
-function approveKp(dealId) {
-    if (!confirm('Утвердить КП? Будет создан PDF с водяным знаком «УТВЕРЖДЕНО».')) return;
+async function approveKp(dealId) {
+    const ok = await DM.confirm({
+        title: 'Утвердить КП?',
+        body: 'Будет создан PDF с водяным знаком «УТВЕРЖДЕНО».',
+        okText: 'Утвердить',
+        okClass: 'btn-primary',
+    });
+    if (!ok) return;
+
     const btn = document.getElementById('btnApproveKp');
-    if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Утверждение…';
-    }
-    fetch('/deals/' + dealId + '/approve-kp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({})
-    })
-    .then(async (response) => {
+    DM.setBusy(btn, 'Утверждение…');
+    DM.showBusy('Утверждение КП…');
+    try {
+        const response = await fetch('/deals/' + dealId + '/approve-kp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
         const data = await response.json();
         if (!response.ok || data.status === 'error') {
-            alert('Ошибка: ' + (data.message || 'не удалось утвердить'));
-            location.href = location.pathname + '?tab=kp';
-            return;
+            DM.error(data.message || 'не удалось утвердить');
+        } else {
+            DM.success(data.message || 'КП утверждено');
         }
-        alert(data.message || 'КП утверждено');
-        location.href = location.pathname + '?tab=kp';
-    })
-    .catch((error) => {
-        alert('Ошибка: ' + error);
-        location.href = location.pathname + '?tab=kp';
-    });
+        setTimeout(function () { location.href = location.pathname + '?tab=kp'; }, 450);
+    } catch (error) {
+        DM.error('Ошибка: ' + error);
+        setTimeout(function () { location.href = location.pathname + '?tab=kp'; }, 600);
+    } finally {
+        DM.hideBusy();
+    }
 }
 
-function sendKp(dealId, channels) {
+async function sendKp(dealId, channels) {
     const hasEmail = {{ 'true' if deal.client_email else 'false' }};
     const hasTg = {{ 'true' if telegram_chat_ready else 'false' }};
     const smtpReady = {{ 'true' if smtp_ready else 'false' }};
@@ -510,23 +550,29 @@ function sendKp(dealId, channels) {
     const selected = [];
 
     if (wanted.includes('email')) {
-        if (!hasEmail) { alert('У клиента не указан email.'); return; }
-        if (!smtpReady) { alert('SMTP не настроен в .env.'); return; }
+        if (!hasEmail) { DM.warning('У клиента не указан email.'); return; }
+        if (!smtpReady) { DM.warning('SMTP не настроен в .env.'); return; }
         selected.push('email');
     }
     if (wanted.includes('telegram')) {
-        if (!hasTg) { alert('Telegram не привязан. Отправьте клиенту ссылку привязки.'); return; }
-        if (!tgReady) { alert('TELEGRAM_BOT_TOKEN не задан.'); return; }
+        if (!hasTg) { DM.warning('Telegram не привязан. Отправьте клиенту ссылку привязки.'); return; }
+        if (!tgReady) { DM.warning('TELEGRAM_BOT_TOKEN не задан.'); return; }
         selected.push('telegram');
     }
     if (!selected.length) {
-        alert('Выберите канал отправки: Email или Telegram.');
+        DM.warning('Выберите канал отправки: Email или Telegram.');
         return;
     }
 
     const labels = { email: 'Email', telegram: 'Telegram' };
     const pretty = selected.map((c) => labels[c] || c).join(', ');
-    if (!confirm('Отправить утверждённое КП клиенту?\nКанал: ' + pretty)) return;
+    const ok = await DM.confirm({
+        title: 'Отправить КП?',
+        body: 'Отправить утверждённое КП клиенту.\nКанал: ' + pretty,
+        okText: 'Отправить',
+        okClass: 'btn-success',
+    });
+    if (!ok) return;
 
     const btns = [
         document.getElementById('btnSendKpEmail'),
@@ -535,15 +581,15 @@ function sendKp(dealId, channels) {
     btns.forEach((btn) => { btn.disabled = true; });
     const activeId = selected[0] === 'email' ? 'btnSendKpEmail' : 'btnSendKpTelegram';
     const active = document.getElementById(activeId);
-    const prevHtml = active ? active.innerHTML : '';
-    if (active) active.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Отправка…';
+    DM.setBusy(active, 'Отправка…');
+    DM.showBusy('Отправка КП…');
 
-    fetch('/deals/' + dealId + '/send-kp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ channels: selected })
-    })
-    .then(async (response) => {
+    try {
+        const response = await fetch('/deals/' + dealId + '/send-kp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ channels: selected })
+        });
         const data = await response.json();
         const lines = [];
         if (data.message) lines.push(data.message);
@@ -557,24 +603,33 @@ function sendKp(dealId, channels) {
         if (Array.isArray(data.errors) && data.errors.length) {
             lines.push('Замечания: ' + data.errors.join('; '));
         }
-        alert(lines.join('\n') || (response.ok ? 'Отправлено' : 'Ошибка отправки'));
-        location.href = location.pathname + '?tab=kp';
-    })
-    .catch((error) => {
-        alert('Ошибка: ' + error);
-        if (active) active.innerHTML = prevHtml;
+        const msg = lines.join('\n') || (response.ok ? 'Отправлено' : 'Ошибка отправки');
+        if (response.ok) DM.success(msg); else DM.error(msg);
+        setTimeout(function () { location.href = location.pathname + '?tab=kp'; }, 500);
+    } catch (error) {
+        DM.error('Ошибка: ' + error);
+        DM.clearBusy(active);
         btns.forEach((btn) => { btn.disabled = false; });
-        location.href = location.pathname + '?tab=kp';
-    });
+        setTimeout(function () { location.href = location.pathname + '?tab=kp'; }, 700);
+    } finally {
+        DM.hideBusy();
+    }
 }
 
-function generateKP(dealId) {
-    if (!confirm('Сгенерировать КП тёплого контура (41 000 ₽/м²) для сделки #' + dealId + '?\n\nМожет занять до 1–2 минут (AI через прокси).')) return;
-    const btn = event && event.target ? event.target.closest('button') : null;
-    if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Генерация…';
-    }
+async function generateKP(dealId) {
+    const ok = await DM.confirm({
+        title: 'Сгенерировать КП?',
+        body: 'КП тёплого контура (41 000 ₽/м²) для сделки #' + dealId + '.\n\nМожет занять до 1–2 минут (AI через прокси).',
+        okText: 'Сгенерировать',
+        okClass: 'btn-success',
+    });
+    if (!ok) return;
+
+    const btn = (typeof event !== 'undefined' && event && event.target)
+        ? event.target.closest('button')
+        : document.querySelector('button[onclick*="generateKP"]');
+    DM.setBusy(btn, 'Генерация…');
+    DM.showBusy('Генерация КП…');
 
     function postGenerate(useAi) {
         const controller = new AbortController();
@@ -587,54 +642,72 @@ function generateKP(dealId) {
         }).finally(function () { clearTimeout(timer); });
     }
 
-    postGenerate(true)
-    .then(async (response) => {
+    try {
+        const response = await postGenerate(true);
         const data = await response.json();
         if (!response.ok || data.status === 'error') {
-            alert('Ошибка: ' + (data.message || 'недостаточно данных'));
+            DM.error(data.message || 'недостаточно данных');
             if (data.redirect) window.location = data.redirect;
             else location.href = location.pathname + '?tab=kp';
             return;
         }
-        alert(data.message || 'КП готово');
-        location.href = location.pathname + '?tab=kp';
-    })
-    .catch(async (error) => {
-        // Сеть до VPS часто рвёт длинный AI-запрос — fallback без OpenAI
+        DM.success(data.message || 'КП готово');
+        setTimeout(function () { location.href = location.pathname + '?tab=kp'; }, 450);
+    } catch (error) {
         console.warn('generate with AI failed, retry without AI', error);
-        if (btn) btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Быстрая генерация…';
+        DM.warning('Сеть оборвала AI-запрос — быстрая генерация без AI…');
+        DM.setBusy(btn, 'Быстрая генерация…');
+        DM.showBusy('Быстрая генерация КП…');
         try {
             const response = await postGenerate(false);
             const data = await response.json();
             if (!response.ok || data.status === 'error') {
-                alert('Ошибка: ' + (data.message || String(error)));
+                DM.error(data.message || String(error));
             } else {
-                alert((data.message || 'КП готово') + '\n\n(собрано без AI — сеть оборвала долгий запрос)');
+                DM.success((data.message || 'КП готово') + '\n(собрано без AI)');
             }
-            location.href = location.pathname + '?tab=kp';
+            setTimeout(function () { location.href = location.pathname + '?tab=kp'; }, 500);
         } catch (err2) {
-            alert(
-                'Не удалось связаться с сервером (Failed to fetch).\n' +
-                'Обновите страницу и нажмите ещё раз.\n\n' + err2
-            );
-            if (btn) location.href = location.pathname + '?tab=kp';
+            DM.error('Не удалось связаться с сервером.\nОбновите страницу и нажмите ещё раз.\n' + err2);
+            DM.clearBusy(btn);
         }
+    } finally {
+        DM.hideBusy();
+    }
+}
+
+async function updateStatus(status) {
+    const labels = {
+        new: 'Новая',
+        incomplete: 'Неполные данные',
+        kp_ready: 'КП готово',
+        kp_sent: 'КП отправлено',
+        completed: 'Завершена',
+        lost: 'Проиграна',
+    };
+    const ok = await DM.confirm({
+        title: 'Сменить статус?',
+        body: 'Новый статус: «' + (labels[status] || status) + '».',
+        okText: 'Изменить',
     });
+    if (!ok) return;
+
+    DM.showBusy('Обновление статуса…');
+    try {
+        await fetch('{{ url_for("deals.update_status", deal_id=deal.id) }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: status })
+        }).then((response) => response.json());
+        DM.success('Статус обновлён');
+        setTimeout(function () { location.reload(); }, 400);
+    } catch (error) {
+        DM.error('Ошибка: ' + error);
+    } finally {
+        DM.hideBusy();
+    }
 }
 
-function updateStatus(status) {
-    if (!confirm('Изменить статус на "' + status + '"?')) return;
-    fetch('{{ url_for("deals.update_status", deal_id=deal.id) }}', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: status })
-    })
-    .then((response) => response.json())
-    .then(() => location.reload())
-    .catch((error) => alert('Ошибка: ' + error));
-}
-
-// Сохраняем активную вкладку в URL
 document.querySelectorAll('#dealTabs button[data-bs-toggle="tab"]').forEach((btn) => {
     btn.addEventListener('shown.bs.tab', (ev) => {
         const id = (ev.target.getAttribute('data-bs-target') || '').replace('#tab-', '');

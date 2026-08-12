@@ -5,6 +5,8 @@
 > **About (для GitHub):** Telegram-бот и HTTP API («Дом-Мастер»): из транскрибации — КП, АР, ИР и сводный PDF. Docker · Go API · OpenAPI.
 
 📚 **Полная документация:** [`docs/DOCUMENTATION.md`](docs/DOCUMENTATION.md)  
+👥 **Для менеджеров ОП:** [`docs/РУКОВОДСТВО_МЕНЕДЖЕРА.md`](docs/РУКОВОДСТВО_МЕНЕДЖЕРА.md)  
+🛠️ **Ops / VPS:** [`docs/OPS_CRM.md`](docs/OPS_CRM.md)  
 📡 **OpenAPI 3.1:** [`docs/openapi.yaml`](docs/openapi.yaml)  
 🐳 **Docker:** [`docs/DOCKER.md`](docs/DOCKER.md) · **Docker Hub → сервер:** [`docs/DOCKER_HUB.md`](docs/DOCKER_HUB.md)  
 📄 **Отчёт для куратора:** [`docs/ОТЧЁТ_ДЛЯ_КУРАТОРА_AI_автоматизация.md`](docs/ОТЧЁТ_ДЛЯ_КУРАТОРА_AI_автоматизация.md)  

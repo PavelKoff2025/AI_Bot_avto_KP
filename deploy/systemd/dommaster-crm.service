@@ -2,6 +2,8 @@
 Description=Дом-Мастер CRM (Flask/Waitress :5001)
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=120
+StartLimitBurst=8
 
 [Service]
 Type=simple
@@ -10,15 +12,17 @@ WorkingDirectory=/root/AI_Bot_avto_KP/web_app
 EnvironmentFile=-/root/AI_Bot_avto_KP/.env
 EnvironmentFile=-/root/AI_Bot_avto_KP/web_app/.env
 Environment=PYTHONUNBUFFERED=1
-# Подхватываем utils/ из корня репозитория
 Environment=PYTHONPATH=/root/AI_Bot_avto_KP
+ExecStartPre=/bin/mkdir -p /root/AI_Bot_avto_KP/logs /root/AI_Bot_avto_KP/reports/kp/stroika
+# Освобождаем порт от старых nohup-процессов
+ExecStartPre=-/bin/bash -c 'fuser -k 5001/tcp >/dev/null 2>&1 || true'
 ExecStart=/usr/bin/python3 /root/AI_Bot_avto_KP/web_app/app.py
 Restart=always
 RestartSec=5
 TimeoutStopSec=30
+KillMode=mixed
 
-# Логи в journald + файлы приложения (app сам пишет в logs/app.log если nohup;
-# при systemd удобнее journalctl -u dommaster-crm)
+# Логи: файл + journalctl -u dommaster-crm
 StandardOutput=append:/root/AI_Bot_avto_KP/logs/app.log
 StandardError=append:/root/AI_Bot_avto_KP/logs/app.log
 

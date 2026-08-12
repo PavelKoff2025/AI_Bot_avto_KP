@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}Справка менеджера — Дом-Мастер{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h2 class="mb-0"><i class="bi bi-question-circle"></i> Справка менеджера</h2>
+    <a href="{{ url_for('deals.list_deals') }}" class="btn btn-outline-primary">К сделкам</a>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white"><h5 class="mb-0">Быстрый сценарий</h5></div>
+            <div class="card-body">
+                <ol class="mb-0">
+                    <li><strong>Новая сделка</strong> — вставьте протокол звонка.</li>
+                    <li>Смотрите <strong>%</strong> заполнения эталона.</li>
+                    <li>Если &lt; 80% — откройте «Недостающие данные» и доспросите клиента.</li>
+                    <li>Вкладка <strong>КП</strong> → Сгенерировать → Утвердить.</li>
+                    <li>Отправьте клиенту: <strong>Email</strong> (основной) или <strong>Telegram</strong> (после привязки).</li>
+                </ol>
+            </div>
+        </div>
+
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white"><h5 class="mb-0">Обязательные поля (эталон)</h5></div>
+            <div class="card-body">
+                <p class="text-muted">Для генерации КП нужно ≥ <strong>{{ kp_threshold }}%</strong> (7 полей).</p>
+                <ul>
+                    <li>Телефон</li>
+                    <li>Email (основной канал отправки)</li>
+                    <li>Участок</li>
+                    <li>Площадь дома (м²)</li>
+                    <li>Материал стен (газобетон)</li>
+                    <li>Сроки старта</li>
+                    <li>Финансирование</li>
+                </ul>
+                <p class="mb-0 small text-muted">
+                    Стоимость ТК считается автоматически: площадь × 41&nbsp;000&nbsp;₽/м².
+                    Telegram для % не обязателен.
+                </p>
+            </div>
+        </div>
+
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white"><h5 class="mb-0">Статусы</h5></div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead><tr><th>Статус</th><th>Когда</th></tr></thead>
+                        <tbody>
+                            <tr><td>Новая</td><td>Только создали</td></tr>
+                            <tr><td>Неполные данные</td><td>Ждём уточнений</td></tr>
+                            <tr><td>КП готово</td><td>Есть черновик / утверждённое КП</td></tr>
+                            <tr><td>КП отправлено</td><td>Ушло клиенту</td></tr>
+                            <tr><td>Завершена / Проиграна</td><td>Итог сделки</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card shadow-sm mb-4 border-success">
+            <div class="card-header bg-success-subtle"><h5 class="mb-0">Чек-лист перед отправкой</h5></div>
+            <div class="card-body">
+                <ul class="mb-0">
+                    <li>Телефон и email верные</li>
+                    <li>Площадь и сумма ТК адекватны</li>
+                    <li>КП утверждено (не черновик)</li>
+                    <li>Выбран канал отправки</li>
+                    <li>Статус → «КП отправлено»</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white"><h5 class="mb-0">Telegram</h5></div>
+            <div class="card-body">
+                <p>Чтобы слать КП в Telegram:</p>
+                <ol class="small">
+                    <li>Скопируйте ссылку привязки в карточке сделки.</li>
+                    <li>Отправьте клиенту.</li>
+                    <li>Клиент открывает и жмёт Start.</li>
+                    <li>В карточке появится «привязан».</li>
+                </ol>
+                <p class="mb-0 small text-muted">Бот менеджера: <code>@stroyka_KP_bot</code></p>
+            </div>
+        </div>
+
+        <div class="card shadow-sm">
+            <div class="card-header bg-white"><h5 class="mb-0">Не работает?</h5></div>
+            <div class="card-body small">
+                <ol class="mb-2">
+                    <li>Обновите страницу (Ctrl+Shift+R).</li>
+                    <li>Повторите через минуту.</li>
+                    <li>Напишите администратору: № сделки + что нажимали.</li>
+                </ol>
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('dashboard') }}">На дашборд</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -151,37 +151,54 @@
 <script>
 function copyScript() {
     const scriptText = document.getElementById('script-text').innerText;
-    navigator.clipboard.writeText(scriptText).then(() => {
-        alert('✅ Скрипт скопирован в буфер обмена!');
-    }).catch(() => {
+    const done = function () { DM.success('Скрипт скопирован'); };
+    navigator.clipboard.writeText(scriptText).then(done).catch(() => {
         const textarea = document.createElement('textarea');
         textarea.value = scriptText;
         document.body.appendChild(textarea);
         textarea.select();
         document.execCommand('copy');
         document.body.removeChild(textarea);
-        alert('✅ Скрипт скопирован в буфер обмена!');
+        done();
     });
 }
 
-function generateKP() {
-    if (!confirm('Сгенерировать КП тёплого контура (41 000 ₽/м²)?')) return;
-    fetch('{{ url_for("deals.generate_kp", deal_id=deal.id) }}', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ watermark: 'draft', use_ai: true })
-    })
-    .then(async (response) => {
+async function generateKP() {
+    const ok = await DM.confirm({
+        title: 'Сгенерировать КП?',
+        body: 'КП тёплого контура (41 000 ₽/м²).',
+        okText: 'Сгенерировать',
+        okClass: 'btn-success',
+    });
+    if (!ok) return;
+
+    const btn = (typeof event !== 'undefined' && event && event.target)
+        ? event.target.closest('button')
+        : null;
+    DM.setBusy(btn, 'Генерация…');
+    DM.showBusy('Генерация КП…');
+    try {
+        const response = await fetch('{{ url_for("deals.generate_kp", deal_id=deal.id) }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ watermark: 'draft', use_ai: true })
+        });
         const data = await response.json();
         if (!response.ok) {
-            alert(data.message || 'Недостаточно данных для КП');
+            DM.error(data.message || 'Недостаточно данных для КП');
             if (data.redirect) window.location = data.redirect;
             return;
         }
-        alert(data.message || 'КП готово');
-        window.location = '{{ url_for("deals.deal_detail", deal_id=deal.id) }}';
-    })
-    .catch((error) => alert('Ошибка: ' + error));
+        DM.success(data.message || 'КП готово');
+        setTimeout(function () {
+            window.location = '{{ url_for("deals.deal_detail", deal_id=deal.id) }}';
+        }, 450);
+    } catch (error) {
+        DM.error('Ошибка: ' + error);
+        DM.clearBusy(btn);
+    } finally {
+        DM.hideBusy();
+    }
 }
 </script>
 {% endblock %}

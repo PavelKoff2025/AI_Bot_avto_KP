@@ -1,0 +1,13 @@
+[Unit]
+Description=Дом-Мастер health-check каждые 5 минут
+Requires=dommaster-healthcheck.service
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Persistent=true
+Unit=dommaster-healthcheck.service
+
+[Install]
+WantedBy=timers.target

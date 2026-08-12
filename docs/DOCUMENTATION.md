@@ -1,9 +1,9 @@
 # Документация проекта AI_Auogeneration
 
-**Продукт:** Telegram-помощник менеджера ОП «Дом-Мастер»  
-**Назначение:** из транскрибации звонка за минуты собрать КП, АР, ИР и сводный PDF  
-**Стек:** Python 3.11+, aiogram 3, OpenAI, Jinja2, WeasyPrint, Flask (опционально)  
-**Дата актуализации:** 2026-08-04
+**Продукт:** Telegram-помощник менеджера ОП + CRM «Дом-Мастер»  
+**Назначение:** из транскрибации звонка за минуты собрать КП (CRM / бот / API)  
+**Стек:** Python 3.11+, aiogram 3, OpenAI, Jinja2, WeasyPrint, Flask/Waitress CRM  
+**Дата актуализации:** 2026-08-12
 
 ---
 
@@ -24,6 +24,12 @@
 13. [Разработка и расширение](#13-разработка-и-расширение)
 14. [Известные ограничения](#14-известные-ограничения)
 15. [Связанные файлы](#15-связанные-файлы)
+16. [CRM web_app и production](#16-crm-web_app-и-production)
+
+**Отдельные документы:**
+
+- Менеджеры ОП: [`РУКОВОДСТВО_МЕНЕДЖЕРА.md`](РУКОВОДСТВО_МЕНЕДЖЕРА.md)
+- Ops / VPS / proxy / systemd: [`OPS_CRM.md`](OPS_CRM.md)
 
 ---
 
@@ -111,6 +117,11 @@ python -c "from utils.report_service import create_report; print('OK')"
 | `OPENAI_IMAGE_MODEL` | нет | модель изображений | `gpt-image-1` |
 | `OPENAI_IMAGE_SIZE` | нет | размер картинок | `1024x1024` |
 | `TELEGRAM_BOT_TOKEN` | да (для бота) | токен бота | — |
+| `OPENAI_PROXY` | нет | HTTP/SOCKS прокси для OpenAI (`http://user:pass@host:8888`) | — |
+| `ETALON_KP_THRESHOLD` | нет | порог % эталона для генерации КП в CRM | `80` |
+| `CRM_PUBLIC_URL` | рекомендуется (CRM) | публичный URL CRM | — |
+| `SMTP_HOST` / `SMTP_USER` / `SMTP_PASSWORD` | для email КП | SMTP отправки из CRM | — |
+| `HEALTH_ALERT_CHAT_ID` | нет | Telegram chat для health FAIL | первый из `TELEGRAM_ALLOWED_IDS` |
 | `TELEGRAM_ALLOWED_IDS` | рекомендуется | Telegram user id через запятую | пусто = без ограничения (warning в лог) |
 | `FLASK_API_TOKEN` | рекомендуется | токен API (`X-API-Token` или `Bearer`) | пусто = только localhost |
 | `FLASK_PORT` | нет | порт при запуске `flask_app.py` | `5000` |
@@ -431,11 +442,12 @@ python main.py --kp --no-open
 
 | Ограничение | Комментарий |
 |-------------|-------------|
-| E-mail | Stub: кнопка есть, автоотправки нет |
-| FSM | `MemoryStorage` — сессия теряется при рестарте процесса |
+| E-mail в Telegram-боте | В боте stub; **в CRM** отправка КП по SMTP реализована (`SMTP_*`) |
+| FSM бота | `MemoryStorage` — сессия теряется при рестарте процесса |
 | Demo-данные объекта | Площадь/участок по умолчанию шаблонные; имя берётся из LLM |
 | Combine | 3 страницы КП пересобираются; АР/ИР переиспользуются из пакета |
 | Стоимость API | АР с картинками заметно дороже текстовых вызовов |
+| Сеть VPS РФ | OpenAI — через NL-прокси; Telegram — пин DC в `/etc/hosts` |
 
 ---
 
@@ -450,8 +462,38 @@ python main.py --kp --no-open
 | [`ABOUT.md`](../ABOUT.md) | short About для GitHub |
 | [`docs/openapi.yaml`](openapi.yaml) | OpenAPI 3.1 — HTTP API (Go / Flask) |
 | [`go_server/openapi.yaml`](../go_server/openapi.yaml) | копия OpenAPI рядом с Go-сервером |
+| [`docs/РУКОВОДСТВО_МЕНЕДЖЕРА.md`](РУКОВОДСТВО_МЕНЕДЖЕРА.md) | UX для менеджеров ОП |
+| [`docs/OPS_CRM.md`](OPS_CRM.md) | production: systemd, proxy, health, деплой |
 | [`docs/ОТЧЁТ_ДЛЯ_КУРАТОРА_AI_автоматизация.md`](ОТЧЁТ_ДЛЯ_КУРАТОРА_AI_автоматизация.md) | отчёт для куратора |
 | [`LICENSE`](../LICENSE) | MIT |
+
+---
+
+## 16. CRM web_app и production
+
+Веб-CRM (`web_app/`): сделки, эталон заполнения, генерация/утверждение/отправка КП, дашборд, справка `/help`.
+
+| Что | Где |
+|-----|-----|
+| Entry | `web_app/app.py` (Waitress `:5001`) |
+| Сделки | `web_app/routes_deals.py` |
+| Эталон % | `web_app/etalon_score.py` |
+| Systemd | `deploy/systemd/dommaster-*.service` |
+| Деплой | `scripts/update_server.sh` |
+| Health | `scripts/health_check.sh`, `GET /health?deep=1` |
+
+Полное ops-описание (прокси NL, ufw, logrotate, troubleshooting): **[`OPS_CRM.md`](OPS_CRM.md)**.  
+Инструкция для ОП: **[`РУКОВОДСТВО_МЕНЕДЖЕРА.md`](РУКОВОДСТВО_МЕНЕДЖЕРА.md)**.
+
+Локальный запуск CRM:
+
+```bash
+cd web_app
+PYTHONPATH=.. python3 app.py
+# http://127.0.0.1:5001
+```
+
+На production управляйте только через systemd (`dommaster-crm` / `dommaster-bot`), не через `nohup`.
 
 ---
 

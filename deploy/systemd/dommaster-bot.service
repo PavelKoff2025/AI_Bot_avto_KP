@@ -2,6 +2,8 @@
 Description=Дом-Мастер Telegram-бот (aiogram polling)
 After=network-online.target dommaster-crm.service
 Wants=network-online.target
+StartLimitIntervalSec=120
+StartLimitBurst=8
 
 [Service]
 Type=simple
@@ -11,11 +13,14 @@ EnvironmentFile=-/root/AI_Bot_avto_KP/.env
 EnvironmentFile=-/root/AI_Bot_avto_KP/web_app/.env
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONPATH=/root/AI_Bot_avto_KP
+ExecStartPre=/bin/mkdir -p /root/AI_Bot_avto_KP/logs
 ExecStart=/usr/bin/python3 /root/AI_Bot_avto_KP/bot.py
 Restart=always
 RestartSec=5
 TimeoutStopSec=30
+KillMode=mixed
 
+# Логи: файл + journalctl -u dommaster-bot
 StandardOutput=append:/root/AI_Bot_avto_KP/logs/bot.log
 StandardError=append:/root/AI_Bot_avto_KP/logs/bot.log
 

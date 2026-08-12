@@ -198,12 +198,14 @@ fi
 
 echo "Останавливаем старый процесс..."
 # Если стоят systemd-юниты — ими и управляем
-if systemctl list-unit-files dommaster-crm.service 2>/dev/null | grep -q dommaster-crm; then
+if [[ -f /etc/systemd/system/dommaster-crm.service ]] || systemctl cat dommaster-crm.service >/dev/null 2>&1; then
   systemctl stop dommaster-bot.service 2>/dev/null || true
   systemctl stop dommaster-crm.service 2>/dev/null || true
 fi
 pkill -f 'python3 .*web_app/app.py' 2>/dev/null || true
 pkill -f 'python3 app.py' 2>/dev/null || true
+pkill -f 'python3 bot.py' 2>/dev/null || true
+pkill -f 'python3 .*bot.py' 2>/dev/null || true
 # Waitress остаётся тем же python3 app.py — даём порту освободиться
 sleep 2
 fuser -k 5001/tcp 2>/dev/null || true
@@ -238,11 +240,12 @@ if [[ -f /etc/gai.conf ]] && ! grep -qE '^precedence ::ffff:0:0/96[[:space:]]+10
 fi
 echo "Telegram pin: \$(getent hosts api.telegram.org | head -1 || true)"
 
-if systemctl list-unit-files dommaster-crm.service 2>/dev/null | grep -q dommaster-crm; then
+if [[ -f /etc/systemd/system/dommaster-crm.service ]] || systemctl cat dommaster-crm.service >/dev/null 2>&1; then
   echo "Запуск через systemd (dommaster-crm / dommaster-bot)..."
-  systemctl start dommaster-crm.service
+  systemctl daemon-reload
+  systemctl restart dommaster-crm.service
   sleep 2
-  systemctl start dommaster-bot.service
+  systemctl restart dommaster-bot.service
   sleep 2
   if systemctl is-active --quiet dommaster-crm.service; then
     echo "CRM (systemd) активен"

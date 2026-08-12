@@ -1,0 +1,19 @@
+[Unit]
+Description=Дом-Мастер health-check (CRM / bot / proxy / Telegram)
+After=network-online.target dommaster-crm.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/root/AI_Bot_avto_KP
+EnvironmentFile=-/root/AI_Bot_avto_KP/.env
+EnvironmentFile=-/root/AI_Bot_avto_KP/web_app/.env
+Environment=PYTHONUNBUFFERED=1
+Environment=CRM_URL=http://127.0.0.1:5001
+# Алерты в Telegram при FAIL (cooldown через HEALTH_ALERT_COOLDOWN_MIN)
+ExecStart=/bin/bash /root/AI_Bot_avto_KP/scripts/health_check.sh --alert
+Nice=10
+
+[Install]
+WantedBy=multi-user.target

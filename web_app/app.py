@@ -167,6 +167,13 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
+@app.route('/help')
+@login_required
+def help_page():
+    from etalon_score import KP_THRESHOLD
+
+    return render_template('help.html', kp_threshold=KP_THRESHOLD)
+
 @app.route('/dashboard')
 @login_required
 def dashboard():
@@ -200,7 +207,35 @@ def deal_detail(deal_id):
 
 @app.route('/health')
 def health():
-    return jsonify({"status": "ok"})
+    """Liveness. ?deep=1 — проверка SQLite и наличия OPENAI_PROXY."""
+    deep = request.args.get('deep', '').strip().lower() in {'1', 'true', 'yes'}
+    payload = {"status": "ok", "service": "dommaster-crm"}
+    if not deep:
+        return jsonify(payload)
+
+    checks: dict = {}
+    try:
+        conn = get_db()
+        conn.execute('SELECT 1').fetchone()
+        conn.close()
+        checks['db'] = 'ok'
+    except Exception as exc:  # noqa: BLE001 — health не должен падать
+        checks['db'] = f'fail:{type(exc).__name__}'
+        payload['status'] = 'degraded'
+
+    proxy = (
+        os.getenv('OPENAI_PROXY', '').strip()
+        or os.getenv('HTTPS_PROXY', '').strip()
+        or os.getenv('HTTP_PROXY', '').strip()
+    )
+    checks['openai_proxy'] = 'configured' if proxy else 'missing'
+    if not proxy:
+        # не degraded: CRM жив без прокси, но мониторинг видит пробел
+        checks['openai_proxy_hint'] = 'OPENAI_PROXY пуст'
+
+    payload['checks'] = checks
+    code = 200 if payload['status'] == 'ok' else 503
+    return jsonify(payload), code
 
 # === Инициализация и запуск ===
 app.register_blueprint(deals_bp)
