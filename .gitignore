@@ -60,7 +60,8 @@ tmp/
 temp/
 tickets.db
 .env.docker
-.env
-tickets.db
-.env.docker
-.env
+
+# CRM local data (не коммитить клиентские БД и загрузки)
+web_app/deals.db
+web_app/deals.db.backup_*
+web_app/uploads/
