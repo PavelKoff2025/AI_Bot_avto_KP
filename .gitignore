@@ -65,3 +65,4 @@ tickets.db
 web_app/deals.db
 web_app/deals.db.backup_*
 web_app/uploads/
+backups/
