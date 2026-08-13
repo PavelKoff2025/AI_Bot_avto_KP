@@ -53,7 +53,7 @@ def _parse_ts(raw: Any) -> datetime | None:
 
 
 def last_activity_at(conn: sqlite3.Connection, deal: sqlite3.Row | dict) -> datetime | None:
-    """Последнее действие: action_log → delivery_date → created_at."""
+    """Последнее действие по сделке: action_log (кроме reminder_sent) → delivery_date → created_at."""
     deal_id = deal["id"] if not isinstance(deal, dict) else deal.get("id")
     get = deal.get if isinstance(deal, dict) else deal.__getitem__
 
@@ -62,7 +62,11 @@ def last_activity_at(conn: sqlite3.Connection, deal: sqlite3.Row | dict) -> date
 
         ensure_action_log_table(conn)
         row = conn.execute(
-            "SELECT created_at FROM action_log WHERE deal_id = ? ORDER BY id DESC LIMIT 1",
+            """
+            SELECT created_at FROM action_log
+            WHERE deal_id = ? AND action != 'reminder_sent'
+            ORDER BY id DESC LIMIT 1
+            """,
             (deal_id,),
         ).fetchone()
         if row:
