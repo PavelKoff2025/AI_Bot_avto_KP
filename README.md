@@ -87,8 +87,8 @@
 ### 1. Клонирование
 
 ```bash
-git clone https://github.com/PavelKoff2025/AI_Bot_avto_KP.git
-cd AI_Bot_avto_KP
+git clone https://github.com/PavelKoff2025/OfferDesk.git
+cd OfferDesk
 ```
 
 ### 2. Окружение

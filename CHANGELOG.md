@@ -44,6 +44,7 @@
 ### Изменено
 
 - Продукт закреплён под именем **OfferDesk**. «Дом-Мастер» — заказчик (бренд в КП и письмах). Telegram — канал, не название системы.
+- Репозиторий GitHub: [PavelKoff2025/OfferDesk](https://github.com/PavelKoff2025/OfferDesk) (бывший `AI_Bot_avto_KP`).
 
 ### Планируется
 
@@ -51,4 +52,4 @@
 - ТЗ для внешнего инженера.
 - Выгрузка в внешнюю CRM.
 
-[1.0.0]: https://github.com/PavelKoff2025/AI_Bot_avto_KP/releases/tag/v1.0.0
+[1.0.0]: https://github.com/PavelKoff2025/OfferDesk/releases/tag/v1.0.0

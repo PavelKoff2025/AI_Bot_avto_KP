@@ -218,8 +218,8 @@ sudo ufw status
 
 ```bash
 cd ~
-git clone https://github.com/PavelKoff2025/AI_Bot_avto_KP.git AI_Auogeneration
-cd AI_Auogeneration
+git clone https://github.com/PavelKoff2025/OfferDesk.git
+cd OfferDesk
 ```
 
 Если репозиторий приватный — настройте SSH-ключ или token для `git clone`.

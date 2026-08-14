@@ -3,7 +3,7 @@
 
 **Кому:** куратор Анна  
 **Проект:** OfferDesk — рабочее место ОП, автогенерация коммерческих предложений (КП)  
-**Репозиторий:** https://github.com/PavelKoff2025/AI_Bot_avto_KP  
+**Репозиторий:** https://github.com/PavelKoff2025/OfferDesk  
 **Контекст:** автоматизация подготовки документов отдела продаж строительной компании «Дом-Мастер» на основе транскрибации клиентского звонка и технологий ИИ  
 **Дата актуализации отчёта:** 4 августа 2026  
 
@@ -133,7 +133,7 @@
 **Зачем:** единый источник правды для куратора и для сервера (`git pull` вместо ручного `scp`).
 
 **Что сделано:** коммит и push всех изменений (аудит, Docker, Go, docs, OpenAPI) в  
-https://github.com/PavelKoff2025/AI_Bot_avto_KP  
+https://github.com/PavelKoff2025/OfferDesk  
 Обновлены README и About репозитория. На VPS выполнен `git fetch` / `git reset --hard origin/main` → `HEAD` на `51283e9`.
 
 ---
@@ -205,8 +205,8 @@ https://github.com/PavelKoff2025/AI_Bot_avto_KP
 ### Локально (Python)
 
 ```bash
-git clone https://github.com/PavelKoff2025/AI_Bot_avto_KP.git
-cd AI_Bot_avto_KP
+git clone https://github.com/PavelKoff2025/OfferDesk.git
+cd OfferDesk
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env   # OPENAI_API_KEY, TELEGRAM_BOT_TOKEN, FLASK_API_TOKEN
@@ -232,8 +232,8 @@ export DOCKERHUB_USER=pavelkoff
 ./scripts/push_dockerhub.sh
 
 # на сервере:
-git clone https://github.com/PavelKoff2025/AI_Bot_avto_KP.git
-cd AI_Bot_avto_KP && cp .env.example .env   # секреты
+git clone https://github.com/PavelKoff2025/OfferDesk.git
+cd OfferDesk && cp .env.example .env   # секреты
 export DOCKERHUB_USER=pavelkoff
 ./scripts/pull_and_run.sh go-api
 ```
@@ -278,5 +278,5 @@ export DOCKERHUB_USER=pavelkoff
 Решение демонстрирует паттерн: **извлечь структуру → оформить документ → доставить в рабочий канал**, плюс базовый контур поставки через контейнеры.
 
 Готово к проверке по репозиторию  
-https://github.com/PavelKoff2025/AI_Bot_avto_KP  
+https://github.com/PavelKoff2025/OfferDesk  
 (`AUDIT.md`, `docs/`, Docker-файлы, `go_server/`, скриншоты в `docs/screenshots/`).

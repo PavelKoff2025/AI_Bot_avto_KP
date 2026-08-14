@@ -1,6 +1,6 @@
 # About
 
-**OfferDesk** ([репозиторий](https://github.com/PavelKoff2025/AI_Bot_avto_KP))
+**OfferDesk** ([репозиторий](https://github.com/PavelKoff2025/OfferDesk))
 
 Рабочее место менеджера ОП «Дом-Мастер»: веб-CRM, генерация КП / АР / ИР из транскрибации звонка, отправка клиенту по Email и Telegram. Docker, Go API, OpenAPI.
 

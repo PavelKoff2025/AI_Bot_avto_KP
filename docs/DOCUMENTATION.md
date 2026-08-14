@@ -88,8 +88,8 @@ sudo apt-get install -y python3-venv python3-pip \
 ## 3. Установка
 
 ```bash
-git clone https://github.com/PavelKoff2025/AI_Bot_avto_KP.git
-cd AI_Bot_avto_KP   # или AI_Auogeneration — локальное имя папки
+git clone https://github.com/PavelKoff2025/OfferDesk.git
+cd OfferDesk   # локально папка может называться AI_Auogeneration
 
 python3 -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
