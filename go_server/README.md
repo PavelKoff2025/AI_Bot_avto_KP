@@ -1,4 +1,4 @@
-# Go API Server — AI_Auogeneration
+# Go API Server — OfferDesk
 
 HTTP-сервер на **Go**, совместимый с Python `flask_app.py`: те же эндпоинты, авторизация и лимиты.
 

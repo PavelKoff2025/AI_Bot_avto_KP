@@ -1,4 +1,4 @@
-"""Telegram-бот помощник менеджера отдела продаж."""
+"""Telegram-канал OfferDesk для менеджера отдела продаж."""
 
 from __future__ import annotations
 
@@ -251,10 +251,10 @@ async def cmd_start(message: Message, state: FSMContext, command: CommandObject)
     await state.clear()
     await state.set_state(Flow.waiting_transcription)
     await message.answer(
-        "Привет! Я помощник менеджера ОП «Дом-Мастер».\n\n"
+        "Привет! Это <b>OfferDesk</b> — рабочее место ОП «Дом-Мастер».\n\n"
         "Пришлите <b>.txt</b> с транскрибацией звонка (документом) "
         "или вставьте текст сообщением.\n\n"
-        "Я сверю данные с эталоном и скажу, хватает ли информации для КП.\n\n"
+        "Сверю данные с эталоном и скажу, хватает ли информации для КП.\n\n"
         "Клиенту для привязки сделки отправьте ссылку из CRM "
         "(кнопка «Привязать Telegram»).",
         parse_mode="HTML",

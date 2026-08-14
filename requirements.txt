@@ -1,4 +1,4 @@
-# Python dependencies — AI_Auogeneration / AI Bot автогенерация КП
+# Python dependencies — OfferDesk
 # Python >= 3.11
 #
 # Установка:

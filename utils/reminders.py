@@ -160,7 +160,7 @@ def _crm_base_url() -> str:
 def format_reminder_message(deals: list[dict[str, Any]]) -> str:
     base = _crm_base_url()
     lines = [
-        f"⏰ Напоминание CRM «Дом-Мастер»",
+        f"⏰ Напоминание OfferDesk",
         f"Сделки без действий > {STALE_DAYS} дн.: {len(deals)}",
         "",
     ]

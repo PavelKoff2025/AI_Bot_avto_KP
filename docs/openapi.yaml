@@ -1,10 +1,10 @@
 openapi: 3.1.0
 jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
 info:
-  title: AI Autogeneration API
+  title: OfferDesk API
   summary: HTTP API генерации PDF-отчётов, АР, ИР и коммерческих предложений
   description: |
-    HTTP API проекта **AI_Auogeneration** («Дом-Мастер»).
+    HTTP API **OfferDesk** (для «Дом-Мастер»).
 
     Реализации с одинаковым контрактом:
     - **Go:** `go_server/` (по умолчанию `http://127.0.0.1:5001`)

@@ -1,4 +1,4 @@
-# Аудит проекта AI_Auogeneration
+# Аудит проекта OfferDesk (историческое имя папки: AI_Auogeneration)
 
 **Дата:** 2026-08-04  
 **Объём:** пакет `utils/` + весь проект (`bot.py`, `main.py`, `flask_app.py`, шаблоны, конфиг)  

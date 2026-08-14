@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Сделка #{{ deal.id }} — Дом-Мастер{% endblock %}
+{% block title %}Сделка #{{ deal.id }} — OfferDesk{% endblock %}
 
 {% block content %}
 {% set completion = data.completion_percent if data else (deal.etalon_score or 0) %}
