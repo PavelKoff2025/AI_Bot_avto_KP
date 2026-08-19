@@ -9,6 +9,8 @@ from email.message import EmailMessage
 from pathlib import Path
 from typing import Any
 
+from pricing import PRICE_PER_M2
+
 
 def smtp_configured() -> bool:
     return bool(os.getenv("SMTP_HOST", "").strip() and os.getenv("SMTP_USER", "").strip())
@@ -48,21 +50,38 @@ def send_kp_email(
     area = meta.get("area_m2", "—")
     total = meta.get("total_fmt", "—")
     kp_number = meta.get("kp_number", "КП")
-    manager = manager_name or "Отдел продаж «Дом Мастер»"
+    manager = manager_name or "Отдел продаж"
+    timber = meta.get("kp_kind") == "timber"
+    company = meta.get("company_name") or ("Дом Форест" if timber else "Дом Мастер")
 
-    subject = f"Коммерческое предложение «Дом Мастер» — {kp_number}"
-    body = (
-        f"Здравствуйте, {client_name or 'уважаемый клиент'}!\n\n"
-        f"Направляем коммерческое предложение на строительство тёплого контура "
-        f"из газобетона.\n\n"
-        f"Номер: {kp_number}\n"
-        f"Площадь: {area} м²\n"
-        f"Ориентировочная стоимость ТК: {total}\n"
-        f"Ставка: 41 000 ₽/м² (стандарт компании)\n\n"
-        f"PDF во вложении.\n\n"
-        f"С уважением,\n{manager}\nООО «Дом-Мастер»\n"
-        f"+7 (495) 123-45-67 · dom-master.ru\n"
-    )
+    if timber:
+        subject = f"Коммерческое предложение «{company}» — {kp_number}"
+        body = (
+            f"Здравствуйте, {client_name or 'уважаемый клиент'}!\n\n"
+            f"Направляем коммерческое предложение на строительство дома "
+            f"из клееного бруса (тёплый контур).\n\n"
+            f"Номер: {kp_number}\n"
+            f"Объект / площадь: {area}\n"
+            f"Ориентировочная стоимость: {total}\n\n"
+            f"PDF во вложении. Итоговая смета уточняется после выбора проекта "
+            f"и выезда на участок.\n\n"
+            f"С уважением,\n{manager}\n{company}\n"
+        )
+    else:
+        rate = f"{PRICE_PER_M2:,}".replace(",", " ")
+        subject = f"Коммерческое предложение «Дом Мастер» — {kp_number}"
+        body = (
+            f"Здравствуйте, {client_name or 'уважаемый клиент'}!\n\n"
+            f"Направляем коммерческое предложение на строительство тёплого контура "
+            f"из газобетона.\n\n"
+            f"Номер: {kp_number}\n"
+            f"Площадь: {area} м²\n"
+            f"Ориентировочная стоимость ТК: {total}\n"
+            f"Ставка: {rate} ₽/м² (стандарт компании)\n\n"
+            f"PDF во вложении.\n\n"
+            f"С уважением,\n{manager}\nООО «Дом-Мастер»\n"
+            f"+7 (495) 123-45-67 · dom-master.ru\n"
+        )
 
     msg = EmailMessage()
     msg["Subject"] = subject

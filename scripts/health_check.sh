@@ -3,7 +3,7 @@
 #
 # Usage (на VPS или локально):
 #   ./scripts/health_check.sh
-#   ./scripts/health_check.sh --alert          # при FAIL — Telegram менеджерам
+#   ./scripts/health_check.sh --alert          # при FAIL — только в HEALTH_ALERT_CHAT_ID
 #   ./scripts/health_check.sh --json           # машинный вывод
 #   CRM_URL=http://127.0.0.1:5001 ./scripts/health_check.sh
 #
@@ -11,8 +11,7 @@
 #   CRM_URL / CRM_PUBLIC_URL   URL CRM (по умолчанию http://127.0.0.1:5001)
 #   OPENAI_PROXY               HTTP-прокси для OpenAI
 #   TELEGRAM_BOT_TOKEN         проверка getMe
-#   TELEGRAM_ALLOWED_IDS       куда слать алерты (первый id, или HEALTH_ALERT_CHAT_ID)
-#   HEALTH_ALERT_CHAT_ID       явный chat_id для алертов
+#   HEALTH_ALERT_CHAT_ID       куда слать FAIL (только явный ops-чат; менеджерам не слать)
 #   HEALTH_ALERT_COOLDOWN_MIN  антиспам алертов, минут (по умолчанию 30)
 #   HEALTH_STATE_DIR           каталог state-файлов (по умолчанию logs/)
 
@@ -204,12 +203,19 @@ maybe_alert() {
   [[ "$ALERT" -eq 1 ]] || return 0
   [[ "$FAIL" -gt 0 ]] || return 0
 
-  local chat="${HEALTH_ALERT_CHAT_ID:-}"
+  # Только явный ops-чат. TELEGRAM_ALLOWED_IDS — менеджеры ОП, им health не шлём.
+  local chat
+  chat="$(printf '%s' "${HEALTH_ALERT_CHAT_ID:-}" | tr -d '[:space:]')"
   if [[ -z "$chat" ]]; then
-    chat="$(printf '%s' "${TELEGRAM_ALLOWED_IDS:-}" | tr ',;' '\n' | sed 's/[[:space:]]//g' | grep -E '^[0-9]+$' | head -1 || true)"
+    yellow "ALERT skip: HEALTH_ALERT_CHAT_ID не задан (менеджерам не отправляем)"
+    return 0
   fi
-  if [[ -z "$chat" || -z "$TOKEN" || "$TOKEN" == "your_telegram_bot_token_here" ]]; then
-    yellow "ALERT skip: нет HEALTH_ALERT_CHAT_ID / TELEGRAM_ALLOWED_IDS / TOKEN"
+  if [[ ! "$chat" =~ ^-?[0-9]+$ ]]; then
+    yellow "ALERT skip: HEALTH_ALERT_CHAT_ID не числовой chat_id"
+    return 0
+  fi
+  if [[ -z "$TOKEN" || "$TOKEN" == "your_telegram_bot_token_here" ]]; then
+    yellow "ALERT skip: нет TELEGRAM_BOT_TOKEN"
     return 0
   fi
 

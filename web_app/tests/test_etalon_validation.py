@@ -65,9 +65,27 @@ class TestValidateAgainstEtalon(unittest.TestCase):
         self.assertIn("client_phone", keys)
         self.assertIn("client_email", keys)
 
+    def test_timber_requires_catalog_project(self):
+        base = {
+            "client_phone": "+79164443322",
+            "client_email": "dmitry_b@inbox.ru",
+            "plot": "8 соток",
+            "area": "200 м²",
+            "material": "клееный брус",
+            "timeline": "август 2026",
+            "funding_source": "собственные средства",
+        }
+        without = etalon_match_score(base)
+        self.assertIn("Проект каталога", without["missing"])
+        self.assertFalse(without["can_generate_kp"])
+        with_proj = etalon_match_score({**base, "catalog_project": "Сириус 2.0"})
+        self.assertEqual(with_proj["score"], 100)
+        self.assertTrue(with_proj["can_generate_kp"])
+        self.assertEqual(with_proj["total"], 8)
+
     def test_tk_cost_from_area(self):
-        self.assertEqual(calc_tk_cost("150 м²"), 6_150_000)
-        self.assertEqual(calc_tk_cost("120-140"), 5_330_000)  # 130 × 41000
+        self.assertEqual(calc_tk_cost("150 м²"), 11_250_000)
+        self.assertEqual(calc_tk_cost("120-140"), 9_750_000)  # 130 × 75000
 
     def test_protocol_100_percent_can_generate_kp(self):
         result = validate_against_etalon(PROTOCOL_100)

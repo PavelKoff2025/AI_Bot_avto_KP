@@ -15,21 +15,21 @@ class DashboardStatsTests(unittest.TestCase):
             {
                 "id": 1,
                 "status": "incomplete",
-                "tk_cost": 4_100_000,
+                "tk_cost": 7_500_000,
                 "created_at": (now - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S"),
                 "kp_options": None,
             },
             {
                 "id": 2,
                 "status": "kp_ready",
-                "tk_cost": 6_150_000,
+                "tk_cost": 11_250_000,
                 "created_at": now.strftime("%Y-%m-%d %H:%M:%S"),
-                "kp_options": '{"pdf_path":"/tmp/a.pdf","total":6150000}',
+                "kp_options": '{"pdf_path":"/tmp/a.pdf","total":11250000}',
             },
             {
                 "id": 3,
                 "status": "kp_sent",
-                "tk_cost": 6_150_000,
+                "tk_cost": 11_250_000,
                 "created_at": now.strftime("%Y-%m-%d %H:%M:%S"),
                 "delivery_status": "ok",
                 "kp_options": '{"pdf_path":"/tmp/b.pdf"}',
@@ -40,7 +40,7 @@ class DashboardStatsTests(unittest.TestCase):
         self.assertEqual(stats["in_progress"], 3)
         self.assertEqual(stats["funnel"]["kp"], 2)
         self.assertEqual(stats["funnel"]["sent"], 1)
-        self.assertEqual(stats["avg_check"], int(round((4100000 + 6150000 + 6150000) / 3)))
+        self.assertEqual(stats["avg_check"], int(round((7500000 + 11250000 + 11250000) / 3)))
         self.assertEqual(sum(stats["chart"]["counts"]), 3)
 
     def test_files(self):

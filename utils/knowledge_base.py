@@ -13,6 +13,9 @@ COMPANY_STANDARDS_PATH = KNOWLEDGE_DIR / "company_standards.md"
 COMPANY_COMPLECTATIONS_PATH = KNOWLEDGE_DIR / "company_complectations.md"
 COMPLECTATIONS_SHORT_PATH = KNOWLEDGE_DIR / "complectations_short.md"
 ETALON_PROTOCOL_PATH = KNOWLEDGE_DIR / "etalon_protocol.md"
+TIMBER_STANDARDS_PATH = KNOWLEDGE_DIR / "timber" / "standards.md"
+TIMBER_KP_TEMPLATE_PATH = KNOWLEDGE_DIR / "timber" / "kp_template.md"
+TIMBER_COMPANY_FOREST_PATH = KNOWLEDGE_DIR / "timber" / "company_forest.md"
 
 
 @lru_cache(maxsize=16)
@@ -30,13 +33,28 @@ def load_company_standards() -> str:
 
 
 def load_company_complectations() -> str:
-    """Виды комплектаций: холодный / тёплый контур, White Box, под ключ."""
+    """Виды комплектаций: тёплый контур, White Box, под ключ."""
     return load_knowledge_doc("company_complectations.md")
 
 
 def load_complectations_short() -> str:
     """Краткая справка по комплектациям для быстрой вставки в КП."""
     return load_knowledge_doc("complectations_short.md")
+
+
+def load_timber_standards() -> str:
+    """Правила КП домов из клееного бруса (не газобетон «Дом-Мастер»)."""
+    return load_knowledge_doc("timber/standards.md")
+
+
+def load_timber_kp_template() -> str:
+    """Jinja-макет КП клееного бруса."""
+    return load_knowledge_doc("timber/kp_template.md")
+
+
+def load_timber_company_forest() -> str:
+    """Карточка компании «Дом Форест» для переменных шаблона."""
+    return load_knowledge_doc("timber/company_forest.md")
 
 
 def _excerpt(text: str, max_chars: int) -> str:
@@ -64,4 +82,8 @@ def complectations_short_excerpt(max_chars: int = 2000) -> str:
 def list_knowledge_docs() -> list[str]:
     if not KNOWLEDGE_DIR.is_dir():
         return []
-    return sorted(p.name for p in KNOWLEDGE_DIR.glob("*.md"))
+    return sorted(
+        str(p.relative_to(KNOWLEDGE_DIR))
+        for p in KNOWLEDGE_DIR.rglob("*.md")
+        if p.is_file()
+    )

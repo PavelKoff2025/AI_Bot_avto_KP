@@ -2,14 +2,16 @@
 
 **OfferDesk** ([репозиторий](https://github.com/PavelKoff2025/OfferDesk))
 
-Рабочее место менеджера ОП «Дом-Мастер»: веб-CRM, генерация КП / АР / ИР из транскрибации звонка, отправка клиенту по Email и Telegram. Docker, Go API, OpenAPI.
+Веб-CRM отдела продаж компании «Дом-Мастер»: после звонка менеджер загружает транскрибацию, система сверяет её с эталоном протокола и либо генерирует коммерческое предложение, либо подсказывает, каких данных не хватает. Утверждённое КП уходит клиенту по email (основной канал) или в Telegram.
+
+«Дом-Мастер» — заказчик и бренд в документах. Telegram — канал доставки, не название продукта.
 
 ---
 
 **Для поля About на GitHub (коротко, ≤350 символов):**
 
 ```
-OfferDesk — CRM и генерация КП для «Дом-Мастер»: транскрибация → эталон → PDF → Email/Telegram. Docker · Go API · OpenAPI.
+OfferDesk — CRM отдела продаж «Дом-Мастер»: транскрибация звонка → эталон → КП (PDF) → отправка клиенту. Email — основной канал. Flask · Docker · OpenAPI.
 ```
 
-**Topics (теги):** `crm` · `openai` · `pdf` · `sales` · `telegram-bot` · `aiogram` · `weasyprint` · `docker` · `golang` · `openapi` · `commercial-proposal`
+**Topics (теги):** `crm` · `sales` · `openai` · `pdf` · `weasyprint` · `flask` · `docker` · `openapi` · `sqlite` · `commercial-proposal`

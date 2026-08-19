@@ -30,7 +30,7 @@ COMPANY_REGION = "Московская область"
 MIN_AREA_M2 = 100
 STANDARD_AREA_MIN = 120
 STANDARD_AREA_MAX = 200
-PRICE_PER_M2 = 41_000  # тёплый контур из газобетона (коробка)
+PRICE_PER_M2 = 75_000  # тёплый контур из газобетона (коробка)
 DEFAULT_MATERIAL = "газобетон (автоклавный D400–D500, стены 400 мм)"
 
 KP_DIR = REPORTS_DIR / "kp" / "stroika"
@@ -56,7 +56,7 @@ EXCLUDED_SCOPE = [
 
 DEFAULT_TERMS = [
     "КП действительно 14 дней с даты формирования.",
-    "Цена указана за тёплый контур из газобетона из расчёта 41 000 ₽/м².",
+    f"Цена указана за тёплый контур из газобетона из расчёта {format_money(PRICE_PER_M2)} ₽/м².",
     "Итоговая смета уточняется после выезда на участок и выбора проекта.",
     "Оплата поэтапная по актам готовности разделов работ.",
     "Срок возведения тёплого контура ориентировочно 3,5–5 месяцев после старта фундаментного цикла.",
@@ -97,7 +97,7 @@ def parse_area_m2(raw: Any) -> int | None:
 
 
 def parse_budget_rub(raw: Any) -> int | None:
-    """Грубая оценка бюджета в рублях из строки («7-8 млн», «6150000»)."""
+    """Грубая оценка бюджета в рублях из строки («7-8 млн», «11250000»)."""
     if raw is None:
         return None
     text = str(raw).strip().lower().replace("\xa0", " ").replace(",", ".")
@@ -144,10 +144,11 @@ def _fallback_texts(area_m2: int, total: int, *, material: str | None = None) ->
             f"входная дверь и инженерные вводы по стандарту «{COMPANY_NAME}»."
         ),
         "commercial": (
-            f"Стоимость тёплого контура из газобетона: {area_m2} м² × "
-            f"{format_money(PRICE_PER_M2)} ₽/м² = {total_fmt} ₽. "
-            f"Цена фиксированная по стандарту компании для {COMPANY_REGION}; "
-            f"уточняется после выезда на участок."
+            f"Стоимость тёплого контура — {total_fmt} ₽ "
+            f"({area_m2} м² × {format_money(PRICE_PER_M2)} ₽/м²). "
+            f"Цена фиксированная по стандарту компании для {COMPANY_REGION}. "
+            "КП действует 14 дней. Итоговая смета уточняется после выезда на участок. "
+            "Оплата поэтапная по актам готовности работ."
         ),
         "intro": (
             f"Коммерческое предложение на строительство тёплого контура "
@@ -157,6 +158,30 @@ def _fallback_texts(area_m2: int, total: int, *, material: str | None = None) ->
     }
 
 
+def _looks_like_code_dump(value: Any) -> bool:
+    """True, если модель вернула JSON/словарь вместо связного текста."""
+    if isinstance(value, (dict, list)):
+        return True
+    text = str(value or "").strip()
+    if not text:
+        return False
+    if text[0] in "{[" or text.endswith("}") or text.endswith("]"):
+        return True
+    compact = text.replace(" ", "")
+    return any(
+        token in compact
+        for token in ("'price_", '"price_', "price_per_sqm", "total_price")
+    )
+
+
+def _as_plain_text(value: Any) -> str:
+    if isinstance(value, dict):
+        return ""
+    if isinstance(value, list):
+        return " ".join(str(item).strip() for item in value if str(item).strip())
+    return str(value or "").strip()
+
+
 def _validate_ai_texts(data: Mapping[str, Any], *, area_m2: int, total: int) -> dict[str, str]:
     """Проверяет ответ модели; при сбое — fallback."""
     required = ("architecture", "engineering", "specs", "commercial", "intro")
@@ -164,14 +189,19 @@ def _validate_ai_texts(data: Mapping[str, Any], *, area_m2: int, total: int) -> 
     result: dict[str, str] = {}
 
     for key in required:
-        value = str(data.get(key) or "").strip()
+        raw = data.get(key)
+        if _looks_like_code_dump(raw):
+            result[key] = fallback[key]
+            continue
+        value = _as_plain_text(raw)
         if len(value) < 40 or len(value) > 1200:
             value = fallback[key]
         # Не даём модели подменить корпоративную цену другой цифрой в ключевом блоке
         if key == "commercial":
-            if str(PRICE_PER_M2) not in value.replace(" ", "") and "41 000" not in value and "41000" not in value.replace(" ", ""):
+            compact = value.replace(" ", "").replace("\xa0", "")
+            if str(PRICE_PER_M2) not in compact:
                 value = fallback[key]
-            if format_money(total) not in value and str(total) not in value.replace(" ", ""):
+            elif format_money(total) not in value and str(total) not in compact:
                 value = fallback[key]
         result[key] = value
     return result
@@ -226,8 +256,11 @@ def generate_kp_texts_with_ai(
         f"Этап КП — «Стройка»: тёплый контур из газобетона. "
         f"Корпоративная база цены строго {PRICE_PER_M2} ₽/м². "
         "Не меняй цену и итог в коммерческом блоке. "
-        "Можно кратко сослаться на уровни комплектаций из справки, "
-        "но предмет этого КП — тёплый контур (не «под ключ»). "
+        "Не упоминай «холодный контур» — такого уровня в оферте нет. "
+        "Поля architecture, engineering, specs, commercial, intro — "
+        "связные абзацы на русском, не JSON, не словари и не формулы в фигурных скобках. "
+        "Можно кратко сослаться на White Box и «под ключ», "
+        "но предмет этого КП — тёплый контур. "
         "Опирайся ТОЛЬКО на базу знаний ниже. Пиши по-русски, деловым стилем.\n\n"
         f"=== БЫСТРАЯ СПРАВКА: complectations_short.md ===\n{short}\n\n"
         f"=== БАЗА ЗНАНИЙ: company_standards.md ===\n{standards}\n\n"
@@ -239,8 +272,9 @@ def generate_kp_texts_with_ai(
         "architecture — архитектурное описание объекта (2–4 предложения),\n"
         "engineering — инженерные решения на этапе тёплого контура (2–4 предложения),\n"
         "specs — технические характеристики состава тёплого контура (2–5 предложений),\n"
-        "commercial — коммерческие условия с обязательным указанием "
-        f"цены {PRICE_PER_M2} ₽/м² и итога {format_money(total)} ₽,\n"
+        "commercial — коммерческие условия связным текстом (2–4 предложения) "
+        f"с обязательным указанием цены {PRICE_PER_M2} ₽/м² и итога {format_money(total)} ₽; "
+        "не возвращай объект/словарь,\n"
         "intro — краткое введение к КП (1–2 предложения).\n\n"
         f"Клиент: {client_name}\n"
         f"Площадь: {area_m2} м²\n"
@@ -348,20 +382,36 @@ def build_stroika_kp_context(
 
     manager = manager_name or "Отдел продаж «Дом Мастер»"
 
+    total_fmt = format_money(total)
     complectations_table = [
-        {"name": "Холодный контур", "price": "9 500 000 ₽"},
-        {"name": "Тёплый контур", "price": "10 500 000 ₽"},
-        {"name": "White Box", "price": "+2 500 000 ₽"},
-        {"name": "Под ключ", "price": "индивидуально"},
+        {
+            "name": "Тёплый контур",
+            "price": f"{total_fmt} ₽",
+        },
+        {
+            "name": "White Box",
+            "price": "~ + 2 500 000 ₽",
+        },
+        {
+            "name": "Под ключ",
+            "price": "индивидуально",
+        },
     ]
     complectations_formula = (
-        f"Стоимость ТК = Площадь (м²) × {format_money(PRICE_PER_M2)} ₽/м² + внешняя отделка"
+        f"Стоимость тёплого контура в этом КП: {area_m2} м² × "
+        f"{format_money(PRICE_PER_M2)} ₽/м² = {total_fmt} ₽."
     )
     complectations_notes = [
-        "Холодный контур — коробка дома (фундамент, стены, крыша, окна, дверь)",
-        "Тёплый контур — коробка + внешняя отделка фасада + водосточная система",
-        "White Box — черновая отделка + инженерия (отопление, электрика, водоснабжение)",
-        "Под ключ — полная готовая отделка, мебель, техника",
+        (
+            "Тёплый контур — состав этого КП: фундамент, стены из газобетона, "
+            "перекрытия, кровля, окна, входная дверь, инженерные вводы."
+        ),
+        (
+            "White Box — черновая отделка и инженерия (отопление, электрика, водоснабжение). "
+            "Ориентир ~ + 2 500 000 ₽; цена уточняется у менеджера вашего проекта "
+            "после завершения работ по тёплому контуру."
+        ),
+        "Под ключ — полная готовая отделка, мебель, техника; расчёт индивидуальный.",
     ]
 
     return {
@@ -402,7 +452,7 @@ def build_stroika_kp_context(
         "complectations_table": complectations_table,
         "complectations_formula": complectations_formula,
         "complectations_notes": complectations_notes,
-        "complectations_base_area": 150,
+        "complectations_base_area": area_m2,
         "included": list(WARM_CONTOUR_SCOPE),
         "excluded": list(EXCLUDED_SCOPE),
         "terms": list(DEFAULT_TERMS),

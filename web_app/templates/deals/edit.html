@@ -87,8 +87,8 @@
                 <div class="mb-3">
                     <label class="form-label">Стоимость ТК (авто)</label>
                     <input type="text" class="form-control" disabled
-                           value="{{ deal.tk_cost_fmt or 'будет рассчитана из площади × 41 000 ₽/м²' }}">
-                    <div class="form-text">Ориентир по стандарту «Дом-Мастер»: площадь × 41&nbsp;000&nbsp;₽/м²</div>
+                           value="{{ deal.tk_cost_fmt or ('будет рассчитана из площади × ' + price_per_m2_fmt + ' ₽/м²') }}">
+                    <div class="form-text">Ориентир по стандарту «Дом-Мастер»: площадь × {{ price_per_m2_fmt }}&nbsp;₽/м²</div>
                 </div>
                 <div class="mb-3">
                     <label class="form-label">Бюджет клиента <span class="text-muted">(необязательно)</span></label>
@@ -100,7 +100,21 @@
                     <label class="form-label">Материал стен</label>
                     <input type="text" name="material" class="form-control"
                            value="{{ deal.material or '' }}"
-                           placeholder="газобетон (стандарт)">
+                           placeholder="газобетон или клееный брус">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Проект каталога
+                        <span class="text-muted small">(обязательно для клееного бруса)</span></label>
+                    <select name="catalog_project" class="form-select">
+                        <option value="">— не выбран —</option>
+                        <option value="Индивидуальный" {% if deal.catalog_project == 'Индивидуальный' %}selected{% endif %}>Индивидуальный (не из каталога)</option>
+                        {% for p in timber_catalog or [] %}
+                        <option value="{{ p.name }}" {% if deal.catalog_project == p.name %}selected{% endif %}>{{ catalog_label(p) }}</option>
+                        {% endfor %}
+                    </select>
+                    <div class="form-text">
+                        <a href="https://dom-forest.ru/katalog/doma-iz-kleenogo-brusa/" target="_blank" rel="noopener">Каталог домов из клееного бруса</a>
+                    </div>
                 </div>
                 <div class="mb-3">
                     <label class="form-label">Сроки строительства</label>

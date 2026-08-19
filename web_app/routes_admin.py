@@ -13,6 +13,7 @@ from flask import Blueprint, jsonify, redirect, session, url_for
 from clear_test_data import clear_test_data
 from db_utils import connect_db
 from load_demo_protocols import load_demo_protocols
+from authz import DENY_ADMIN_ACTION_MSG, is_service_admin
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -38,6 +39,8 @@ def deals_db_path() -> Path:
 @login_required
 def clear_deals():
     """Очистка всех сделок + uploads."""
+    if not is_service_admin():
+        return jsonify({"success": False, "message": DENY_ADMIN_ACTION_MSG}), 403
     try:
         db_path = deals_db_path()
         count = 0
@@ -62,6 +65,8 @@ def clear_deals():
 @login_required
 def load_demo():
     """Бэкап БД → очистка → загрузка 4 демо-протоколов."""
+    if not is_service_admin():
+        return jsonify({"success": False, "message": DENY_ADMIN_ACTION_MSG}), 403
     try:
         db_path = deals_db_path()
 

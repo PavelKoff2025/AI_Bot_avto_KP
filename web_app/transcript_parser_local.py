@@ -4,9 +4,15 @@ from __future__ import annotations
 
 import os
 import re
+import sys
+from pathlib import Path
 from typing import Any, Mapping
 
 from etalon_score import KP_THRESHOLD, etalon_match_score
+
+_ROOT = Path(__file__).resolve().parents[1]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 try:
     from file_parser import extract_text_from_file
@@ -48,6 +54,7 @@ class TranscriptParser:
         "material": "Материал стен",
         "timeline": "Сроки строительства",
         "funding_source": "Финансирование",
+        "catalog_project": "Проект каталога",
         # алиасы из чернового API
         "phone": "Телефон",
         "email": "Email",
@@ -142,6 +149,7 @@ class TranscriptParser:
             "timeline": None,
             "work_scope": None,
             "funding_source": None,
+            "catalog_project": None,
             "status": "new",
             # алиасы чернового API
             "phone": "",
@@ -224,13 +232,13 @@ class TranscriptParser:
             result["client_telegram"] = handle
 
         # --- Участок ---
-        plot_match = self.patterns["plot_size"].search(text)
-        if plot_match:
-            result["plot"] = self._clean(plot_match.group(1))
+        plot_alt = self.patterns["plot_size_alt"].search(text)
+        if plot_alt:
+            result["plot"] = self._clean(plot_alt.group(0))
         else:
-            plot_alt = self.patterns["plot_size_alt"].search(text)
-            if plot_alt:
-                result["plot"] = self._clean(plot_alt.group(1))
+            plot_match = self.patterns["plot_size"].search(text)
+            if plot_match:
+                result["plot"] = self._clean(plot_match.group(1))
 
         # --- Бюджет ---
         budget_match = self.patterns["budget"].search(text)
@@ -255,23 +263,36 @@ class TranscriptParser:
                 result["area"] = self._clean(f"{num} {unit}")
 
         # --- Материал ---
-        material_keywords = [
-            "газобетон",
-            "кирпич",
-            "брус",
-            "пеноблок",
-            "керамоблок",
-        ]
-        for material in material_keywords:
-            if material in text.lower():
-                result["material"] = material
-                break
-        if not result["material"]:
-            mat_match = self.patterns["material"].search(text)
-            if mat_match:
-                candidate = self._clean(mat_match.group(1))
-                if candidate and any(k in candidate.lower() for k in material_keywords):
-                    result["material"] = candidate
+        if "клеен" in text.lower() and "брус" in text.lower():
+            result["material"] = "клееный брус"
+        else:
+            material_keywords = [
+                "газобетон",
+                "кирпич",
+                "брус",
+                "пеноблок",
+                "керамоблок",
+            ]
+            for material in material_keywords:
+                if material in text.lower():
+                    result["material"] = material
+                    break
+            if not result["material"]:
+                mat_match = self.patterns["material"].search(text)
+                if mat_match:
+                    candidate = self._clean(mat_match.group(1))
+                    if candidate and any(k in candidate.lower() for k in material_keywords):
+                        result["material"] = candidate
+
+        # --- Проект каталога «Дом Форест» ---
+        try:
+            from utils.timber_catalog import match_catalog_project
+
+            hit = match_catalog_project(text)
+            if hit:
+                result["catalog_project"] = hit["name"]
+        except Exception:
+            pass
 
         # --- Сроки ---
         months = [
@@ -300,6 +321,8 @@ class TranscriptParser:
                 if season in lower:
                     result["timeline"] = season
                     break
+        if not result["timeline"] and re.search(r"через\s+месяц", lower):
+            result["timeline"] = "через месяц"
         if not result["timeline"]:
             dl = self.patterns["deadline"].search(text)
             if dl:
@@ -315,12 +338,12 @@ class TranscriptParser:
                         result["timeline"] = candidate
 
         # --- Финансирование ---
-        if "ипотек" in lower:
-            result["funding_source"] = "ипотека"
+        if "накопл" in lower or re.search(r"свои\s+(средств|деньг|накоп)", lower) or "мои деньги" in lower:
+            result["funding_source"] = "собственные средства"
         elif "маткапитал" in lower:
             result["funding_source"] = "маткапитал"
-        elif "свои" in lower or "накопл" in lower:
-            result["funding_source"] = "собственные средства"
+        elif "ипотек" in lower:
+            result["funding_source"] = "ипотека"
         else:
             fin = self.patterns["financing"].search(text)
             if fin:
@@ -330,19 +353,27 @@ class TranscriptParser:
 
     def _with_completion(self, result: dict[str, Any]) -> dict[str, Any]:
         """Считает % заполнения, missing и алиасы."""
+        fields = list(self.required_fields)
+        try:
+            from pricing import is_timber_material
+        except ImportError:
+            is_timber_material = lambda raw: "брус" in str(raw or "").lower() or "клеен" in str(raw or "").lower()
+        if is_timber_material(result.get("material")):
+            if "catalog_project" not in fields:
+                fields.append("catalog_project")
         filled_count = sum(
             1
-            for field in self.required_fields
+            for field in fields
             if result.get(field) and str(result[field]).strip()
         )
-        total_required = len(self.required_fields)
+        total_required = len(fields)
         percent = (
             round((filled_count / total_required) * 100) if total_required else 0
         )
 
         missing = [
             field
-            for field in self.required_fields
+            for field in fields
             if not result.get(field) or not str(result[field]).strip()
         ]
 

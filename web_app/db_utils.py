@@ -16,6 +16,7 @@ DEAL_EXTRA_COLUMNS: tuple[tuple[str, str], ...] = (
     ("delivery_error", "TEXT"),
     ("telegram_chat_id", "TEXT"),  # числовой chat_id для отправки КП ботом
     ("telegram_outbox", "TEXT"),  # JSON очередь отправки КП (когда VPS не достучится до Telegram)
+    ("catalog_project", "TEXT"),  # типовой проект каталога «Дом Форест»
 )
 
 
@@ -26,15 +27,19 @@ def ensure_deal_columns(conn: sqlite3.Connection) -> None:
             conn.execute(f"ALTER TABLE deals ADD COLUMN {name} {col_type}")
     conn.commit()
 
-    # Пересчёт Стоимости ТК по площади (стандарт 41 000 ₽/м²)
+    # Пересчёт Стоимости ТК по площади (стандарт 75 000 ₽/м²)
     try:
-        from pricing import calc_tk_cost
+        from pricing import calc_tk_cost, is_timber_material
 
-        rows = conn.execute("SELECT id, area, tk_cost FROM deals").fetchall()
+        rows = conn.execute("SELECT id, area, tk_cost, material FROM deals").fetchall()
         for row in rows:
-            cost = calc_tk_cost(row[1] if not isinstance(row, sqlite3.Row) else row["area"])
-            deal_id = row[0] if not isinstance(row, sqlite3.Row) else row["id"]
-            current = row[2] if not isinstance(row, sqlite3.Row) else row["tk_cost"]
+            if isinstance(row, sqlite3.Row):
+                deal_id, area, current, material = row["id"], row["area"], row["tk_cost"], row["material"]
+            else:
+                deal_id, area, current, material = row[0], row[1], row[2], row[3]
+            if is_timber_material(material):
+                continue
+            cost = calc_tk_cost(area)
             if cost is not None and current != cost:
                 conn.execute("UPDATE deals SET tk_cost = ? WHERE id = ?", (cost, deal_id))
         conn.commit()

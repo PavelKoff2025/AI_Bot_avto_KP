@@ -20,9 +20,9 @@ from werkzeug.utils import secure_filename
 from file_parser import extract_text_from_file
 from transcript_parser_local import parse_transcript_local as parse_transcript
 from transcript_parser_local import validate_against_etalon
-from etalon_score import etalon_match_score, KP_THRESHOLD, ETALON_FIELDS, FIELD_QUESTIONS
+from etalon_score import etalon_match_score, KP_THRESHOLD, FIELD_QUESTIONS, etalon_fields_for
 from db_utils import connect_db
-from pricing import apply_tk_cost, calc_tk_cost
+from pricing import apply_tk_cost, calc_tk_cost, is_timber_material
 from models import (
     DEAL_STATUSES,
     STATUS_LABELS,
@@ -34,6 +34,7 @@ from models import (
     status_after_kp_sent,
     status_label,
 )
+from authz import DENY_DELETE_MSG, is_service_admin
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -72,6 +73,24 @@ def _safe_kp_pdf_path(pdf_path: str | Path) -> Path | None:
     if not path.is_file() or path.suffix.lower() != ".pdf":
         return None
     return path
+
+
+def _remove_deal_kp_files(deal: dict) -> None:
+    """Удаляет PDF КП сделки, если файл лежит в reports/kp."""
+    meta = _parse_kp_options(deal.get("kp_options"))
+    pdf_path = (meta or {}).get("pdf_path")
+    path = _safe_kp_pdf_path(pdf_path) if pdf_path else None
+    if not path:
+        return
+    try:
+        path.unlink(missing_ok=True)
+        folder = path.parent
+        allowed = (PROJECT_ROOT / "reports" / "kp").resolve()
+        folder.resolve().relative_to(allowed)
+        if folder.is_dir() and folder.name.startswith("deal_") and not any(folder.iterdir()):
+            folder.rmdir()
+    except (OSError, ValueError):
+        logger.warning("Не удалось удалить файл КП сделки %s", deal.get("id"))
 
 def login_required(f):
     @wraps(f)
@@ -257,6 +276,7 @@ def new_deal():
             'material': request.form.get('material', '').strip(),
             'timeline': request.form.get('timeline', '').strip(),
             'funding_source': request.form.get('funding_source', '').strip(),
+            'catalog_project': request.form.get('catalog_project', '').strip(),
         }
         notes = request.form.get('notes', '').strip()
 
@@ -279,21 +299,16 @@ def new_deal():
         client_email = parsed_data.get('client_email')
         client_telegram = parsed_data.get('client_telegram')
 
-        contact_gaps = _missing_required_contacts(client_phone, client_email)
-        if contact_gaps:
-            flash(
-                'Укажите обязательные контакты: ' + ', '.join(contact_gaps)
-                + ' (email — основной канал КП; Telegram опционален).',
-                'error',
-            )
-            return redirect(request.url)
+        # Телефон/email не блокируют создание: парсер берёт их из протокола,
+        # иначе сделка уходит в «Неполные данные» (эталон).
         plot = parsed_data.get('plot')
         budget = parsed_data.get('budget')  # необязательно (если клиент назвал)
         area = parsed_data.get('area')
         material = parsed_data.get('material')
         timeline = parsed_data.get('timeline')
         funding_source = parsed_data.get('funding_source')
-        tk_cost = calc_tk_cost(area)
+        catalog_project = parsed_data.get('catalog_project')
+        tk_cost = None if is_timber_material(material) else calc_tk_cost(area)
         initial_status = status_after_etalon(
             can_generate_kp=bool(validation.get('can_generate_kp')),
         )
@@ -304,12 +319,12 @@ def new_deal():
             INSERT INTO deals (
                 client_name, client_phone, client_email, client_telegram,
                 transcript, notes, user_id, status,
-                plot, budget, area, material, timeline, funding_source, tk_cost
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                plot, budget, area, material, timeline, funding_source, tk_cost, catalog_project
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             client_name, client_phone, client_email, client_telegram,
             transcript, notes, session['user_id'], initial_status,
-            plot, budget, area, material, timeline, funding_source, tk_cost
+            plot, budget, area, material, timeline, funding_source, tk_cost, catalog_project
         ))
         deal_id = cursor.lastrowid
         log_action(
@@ -383,7 +398,7 @@ def deal_detail(deal_id):
     field_rows = [
         {'key': 'client_name', 'label': 'Имя клиента', 'value': deal.get('client_name')},
     ]
-    for key, label in ETALON_FIELDS:
+    for key, label in etalon_fields_for(deal):
         value = deal.get(key)
         text = str(value).strip() if value is not None else ''
         if text in {'', '—', '-', 'None', 'null'}:
@@ -455,7 +470,7 @@ def incomplete_data(deal_id):
             'label': label,
             'question': FIELD_QUESTIONS.get(key, ''),
         }
-        for key, label in ETALON_FIELDS
+        for key, label in etalon_fields_for(deal)
         if key in match['missing_keys']
     ]
 
@@ -517,6 +532,11 @@ def edit_deal(deal_id):
             or deal['funding_source']
             or ''
         ).strip()
+        catalog_project = (
+            request.form.get('catalog_project')
+            or deal.get('catalog_project')
+            or ''
+        ).strip()
 
         # Если менеджер дополнил транскрибацию — перепарсить и заполнить пустые поля
         if transcript and transcript != (deal['transcript'] or ''):
@@ -528,6 +548,7 @@ def edit_deal(deal_id):
                 material = material or reparsed.get('material') or ''
                 timeline = timeline or reparsed.get('timeline') or ''
                 funding_source = funding_source or reparsed.get('funding_source') or ''
+                catalog_project = catalog_project or reparsed.get('catalog_project') or ''
                 client_name = client_name or reparsed.get('client_name') or ''
                 client_phone = client_phone or reparsed.get('client_phone') or ''
                 client_email = client_email or reparsed.get('client_email') or ''
@@ -546,7 +567,7 @@ def edit_deal(deal_id):
             return redirect(url_for('deals.edit_deal', deal_id=deal_id))
 
         try:
-            tk_cost = calc_tk_cost(area)
+            tk_cost = None if is_timber_material(material) else calc_tk_cost(area)
             draft = {
                 'client_phone': client_phone,
                 'client_email': client_email,
@@ -555,6 +576,8 @@ def edit_deal(deal_id):
                 'material': material,
                 'timeline': timeline,
                 'funding_source': funding_source,
+                'catalog_project': catalog_project,
+                'transcript': transcript,
             }
             match_preview = etalon_match_score(draft)
             requested_status = normalize_status(status)
@@ -585,14 +608,14 @@ def edit_deal(deal_id):
                     client_name = ?, client_phone = ?, client_email = ?, client_telegram = ?,
                     transcript = ?, notes = ?, status = ?,
                     plot = ?, budget = ?, area = ?, material = ?, timeline = ?, funding_source = ?,
-                    tk_cost = ?
+                    tk_cost = ?, catalog_project = ?
                 WHERE id = ?
                 ''',
                 (
                     client_name, client_phone, client_email, client_telegram,
                     transcript, notes, new_status,
                     plot, budget, area, material, timeline, funding_source,
-                    tk_cost,
+                    tk_cost, catalog_project,
                     deal_id,
                 ),
             )
@@ -682,21 +705,30 @@ def generate_kp(deal_id):
 
     try:
         from utils.stroika_kp import generate_stroika_kp_pdf, parse_area_m2, PRICE_PER_M2
+        from utils.timber_kp import generate_timber_kp_from_deal, is_timber_material as timber_deal
 
-        if not parse_area_m2(deal.get('area')):
-            conn.close()
-            return jsonify({
-                'status': 'error',
-                'message': 'Укажите площадь дома (м²) в карточке сделки — без неё нельзя посчитать КП.',
-                'redirect': url_for('deals.edit_deal', deal_id=deal_id),
-            }), 400
+        timber = timber_deal(deal.get('material')) or timber_deal(deal.get('transcript'))
+        if timber:
+            meta = generate_timber_kp_from_deal(
+                deal,
+                watermark=watermark,
+                manager_name=manager_name,
+            )
+        else:
+            if not parse_area_m2(deal.get('area')):
+                conn.close()
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Укажите площадь дома (м²) в карточке сделки — без неё нельзя посчитать КП.',
+                    'redirect': url_for('deals.edit_deal', deal_id=deal_id),
+                }), 400
 
-        meta = generate_stroika_kp_pdf(
-            deal,
-            watermark=watermark,
-            use_ai=bool(use_ai),
-            manager_name=manager_name,
-        )
+            meta = generate_stroika_kp_pdf(
+                deal,
+                watermark=watermark,
+                use_ai=bool(use_ai),
+                manager_name=manager_name,
+            )
     except ValueError as exc:
         conn.close()
         return jsonify({'status': 'error', 'message': str(exc)}), 400
@@ -713,11 +745,23 @@ def generate_kp(deal_id):
         'UPDATE deals SET kp_options = ?, status = ? WHERE id = ?',
         (json.dumps(meta, ensure_ascii=False), new_status, deal_id),
     )
+    if timber:
+        message = (
+            f'КП готово (клееный брус): {meta.get("total_fmt")} '
+            f'· вариант «Стандарт»'
+        )
+        detail = f'брус · {meta.get("total_fmt")} · {meta.get("watermark")}'
+    else:
+        message = (
+            f'КП готово: {meta["area_m2"]} м² × {PRICE_PER_M2:,} ₽/м² = {meta["total_fmt"]}'
+            .replace(',', ' ')
+        )
+        detail = f'{meta.get("area_m2")} м² · {meta.get("total_fmt")} · {meta.get("watermark")}'
     log_action(
         conn,
         deal_id=deal_id,
         action='kp_generated',
-        detail=f'{meta.get("area_m2")} м² · {meta.get("total_fmt")} · {meta.get("watermark")}',
+        detail=detail,
         user_id=_actor_id(),
     )
     if normalize_status(deal.get('status')) != new_status:
@@ -733,10 +777,7 @@ def generate_kp(deal_id):
 
     return jsonify({
         'status': 'success',
-        'message': (
-            f'КП готово: {meta["area_m2"]} м² × {PRICE_PER_M2:,} ₽/м² = {meta["total_fmt"]}'
-            .replace(',', ' ')
-        ),
+        'message': message,
         'deal_id': deal_id,
         'score': match['score'],
         'kp': meta,
@@ -764,7 +805,11 @@ def download_kp(deal_id):
         flash('Файл КП не найден на диске', 'error')
         return redirect(url_for('deals.deal_detail', deal_id=deal_id))
 
-    download_name = f"KP_DomMaster_deal{deal_id}.pdf"
+    download_name = (
+        f"KP_timber_deal{deal_id}.pdf"
+        if (meta or {}).get("kp_kind") == "timber"
+        else f"KP_DomMaster_deal{deal_id}.pdf"
+    )
     response = send_file(
         path,
         mimetype='application/pdf',
@@ -948,7 +993,11 @@ def download_kp_bot(deal_id):
         path,
         mimetype='application/pdf',
         as_attachment=True,
-        download_name=f'KP_DomMaster_deal{deal_id}.pdf',
+        download_name=(
+            f'KP_timber_deal{deal_id}.pdf'
+            if (meta or {}).get('kp_kind') == 'timber'
+            else f'KP_DomMaster_deal{deal_id}.pdf'
+        ),
         max_age=0,
     )
 
@@ -975,14 +1024,27 @@ def approve_kp(deal_id):
     manager_name = session.get('user_name') or session.get('username') or None
     try:
         from utils.stroika_kp import generate_stroika_kp_pdf
+        from utils.timber_kp import generate_timber_kp_from_deal, is_timber_material as timber_deal
 
-        # Без AI — быстрее и стабильнее на VPS; цифры те же по стандарту
-        approved = generate_stroika_kp_pdf(
-            deal,
-            watermark='approved',
-            use_ai=False,
-            manager_name=manager_name,
+        timber = (
+            (meta or {}).get("kp_kind") == "timber"
+            or timber_deal(deal.get("material"))
+            or timber_deal(deal.get("transcript"))
         )
+        if timber:
+            approved = generate_timber_kp_from_deal(
+                deal,
+                watermark="approved",
+                manager_name=manager_name,
+            )
+        else:
+            # Без AI — быстрее и стабильнее на VPS; цифры те же по стандарту
+            approved = generate_stroika_kp_pdf(
+                deal,
+                watermark='approved',
+                use_ai=False,
+                manager_name=manager_name,
+            )
     except Exception as exc:  # noqa: BLE001
         conn.close()
         logger.exception('Ошибка утверждения КП #%s', deal_id)
@@ -1236,6 +1298,37 @@ def update_status(deal_id):
     conn.commit()
     conn.close()
     return jsonify({'status': 'ok', 'deal_status': status, 'label': status_label(status)})
+
+
+@deals_bp.route('/<int:deal_id>/delete', methods=['POST'])
+@login_required
+def delete_deal(deal_id):
+    """Удаляет одну сделку. Только администратор сервиса."""
+    if not is_service_admin():
+        return jsonify({'status': 'error', 'message': DENY_DELETE_MSG}), 403
+
+    conn = get_db()
+    row = conn.execute('SELECT * FROM deals WHERE id = ?', (deal_id,)).fetchone()
+    if not row:
+        conn.close()
+        return jsonify({'status': 'error', 'message': 'Сделка не найдена'}), 404
+
+    deal = dict(row)
+    try:
+        conn.execute('DELETE FROM action_log WHERE deal_id = ?', (deal_id,))
+    except sqlite3.OperationalError:
+        pass
+    conn.execute('DELETE FROM deals WHERE id = ?', (deal_id,))
+    conn.commit()
+    conn.close()
+    _remove_deal_kp_files(deal)
+
+    name = (deal.get('client_name') or '').strip() or f'#{deal_id}'
+    return jsonify({
+        'status': 'success',
+        'message': f'Сделка {name} удалена',
+        'redirect': url_for('deals.list_deals'),
+    })
 
 
 @deals_bp.route('/reminders/run', methods=['POST'])

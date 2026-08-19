@@ -120,7 +120,7 @@
 
     <script>
         function generateKP() {
-            if (!confirm('Сгенерировать КП тёплого контура (41 000 ₽/м²)?')) return;
+            if (!confirm('Сгенерировать КП тёплого контура ({{ price_per_m2_fmt }} ₽/м²)?')) return;
             fetch('{{ url_for("deals.generate_kp", deal_id=deal.id) }}', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

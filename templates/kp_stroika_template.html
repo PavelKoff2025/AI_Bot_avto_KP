@@ -377,8 +377,8 @@
 
       <h2>6. Уровни комплектаций (справка)</h2>
       <p class="section-text" style="margin-bottom:8px;">
-        Ориентир для дома {{ complectations_base_area }}&nbsp;м², {{ company_name }}, Московская область.
-        Предмет этого КП — <strong>тёплый контур</strong> по формуле ниже.
+        Предмет этого КП — <strong>тёплый контур</strong> для дома {{ area_m2 }}&nbsp;м².
+        Его стоимость равна сумме коммерческого предложения.
       </p>
       <table class="items">
         <thead>
@@ -397,7 +397,7 @@
         </tbody>
       </table>
       <div class="budget-note" style="margin-top:8px;">
-        <strong>Формула ТК:</strong> {{ complectations_formula }}
+        {{ complectations_formula }}
       </div>
       <ul class="compact" style="margin-top:8px;">
         {% for note in complectations_notes %}<li>{{ note }}</li>{% endfor %}

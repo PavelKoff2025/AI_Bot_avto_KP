@@ -48,7 +48,7 @@
         
         <label>Или вставьте текст транскрибации</label>
         <textarea name="transcript" rows="10">{{ deal.transcript if deal else '' }}</textarea>
-        <p class="hint">При сохранении система сравнит данные с эталоном. Для генерации КП нужно ≥ {{ kp_threshold or 80 }}%.</p>
+        <p class="hint">Достаточно протокола: имя, телефон, email и поля эталона подставятся сами. Для генерации КП нужно ≥ {{ kp_threshold or 80 }}%.</p>
         
         <hr style="margin: 30px 0;">
         
@@ -57,12 +57,12 @@
         
         <div class="grid-2">
             <div>
-                <label>Телефон <span style="color:#c00">*</span></label>
-                <input type="text" name="client_phone" value="{{ deal.client_phone if deal else '' }}" required>
+                <label>Телефон <span style="opacity:.7">(из протокола)</span></label>
+                <input type="text" name="client_phone" value="{{ deal.client_phone if deal else '' }}" placeholder="можно не заполнять — возьмём из текста">
             </div>
             <div>
-                <label>Email <span style="color:#c00">*</span> <span style="opacity:.7">(основной канал КП)</span></label>
-                <input type="email" name="client_email" value="{{ deal.client_email if deal else '' }}" required>
+                <label>Email <span style="opacity:.7">(из протокола, основной канал КП)</span></label>
+                <input type="email" name="client_email" value="{{ deal.client_email if deal else '' }}" placeholder="можно не заполнять — возьмём из текста">
             </div>
         </div>
         
@@ -82,7 +82,7 @@
             </div>
             <div>
                 <label>Стоимость ТК (авто)</label>
-                <input type="text" value="{% if deal and deal.tk_cost_fmt %}{{ deal.tk_cost_fmt }}{% else %}считается из площади × 41 000 ₽/м²{% endif %}" disabled>
+                <input type="text" value="{% if deal and deal.tk_cost_fmt %}{{ deal.tk_cost_fmt }}{% else %}считается из площади × {{ price_per_m2_fmt }} ₽/м²{% endif %}" disabled>
             </div>
         </div>
 
@@ -92,13 +92,23 @@
         <div class="grid-2">
             <div>
                 <label>Материал стен</label>
-                <input type="text" name="material" value="{{ deal.material if deal else '' }}" placeholder="газобетон (стандарт)">
+                <input type="text" name="material" value="{{ deal.material if deal else '' }}" placeholder="газобетон или клееный брус">
             </div>
             <div>
                 <label>Сроки старта</label>
                 <input type="text" name="timeline" value="{{ deal.timeline if deal else '' }}" placeholder="например: август 2026">
             </div>
         </div>
+
+        <label>Проект из каталога <span style="opacity:.7">(обязательно для клееного бруса)</span></label>
+        <select name="catalog_project">
+            <option value="">— не выбран —</option>
+            <option value="Индивидуальный" {% if deal and deal.catalog_project == 'Индивидуальный' %}selected{% endif %}>Индивидуальный (не из каталога)</option>
+            {% for p in timber_catalog or [] %}
+            <option value="{{ p.name }}" {% if deal and deal.catalog_project == p.name %}selected{% endif %}>{{ catalog_label(p) if catalog_label is defined else p.name }}</option>
+            {% endfor %}
+        </select>
+        <p class="hint">Каталог «Дом Форест»: <a href="https://dom-forest.ru/katalog/doma-iz-kleenogo-brusa/" target="_blank" rel="noopener">dom-forest.ru/katalog</a></p>
 
         <label>Источник финансирования</label>
         <input type="text" name="funding_source" value="{{ deal.funding_source if deal else '' }}" placeholder="свои / ипотека / маткапитал">

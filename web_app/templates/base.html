@@ -13,6 +13,8 @@
         .cell-missing { color: #dc3545; font-weight: 600; white-space: nowrap; }
         .table td { vertical-align: middle; font-size: 13px; max-width: 140px; word-break: break-word; }
         .table th { white-space: nowrap; font-size: 13px; }
+        [data-delete-deal] { cursor: pointer; }
+        [data-delete-deal] i { pointer-events: none; }
 
         /* Mobile shell */
         main.container-fluid { padding-left: 1rem; padding-right: 1rem; }
@@ -315,11 +317,58 @@
             clearBusy: clearBusy,
             showBusy: showBusy,
             hideBusy: hideBusy,
+            canDeleteDeals: {{ 'true' if is_admin else 'false' }},
             success: function (msg) { return toast(msg, { variant: 'success' }); },
             error: function (msg) { return toast(msg, { variant: 'error', delay: 6500 }); },
             warning: function (msg) { return toast(msg, { variant: 'warning', delay: 5500 }); },
             info: function (msg) { return toast(msg, { variant: 'info' }); },
         };
+
+        window.deleteDeal = async function (dealId, clientName) {
+            if (!window.DM.canDeleteDeals) {
+                toast('Для удаления сделки обратитесь к администратору сервиса.', {
+                    variant: 'warning',
+                    delay: 7000,
+                });
+                return;
+            }
+            const label = (clientName && String(clientName).trim()) ? String(clientName).trim() : ('#' + dealId);
+            const ok = await confirmDialog({
+                title: 'Удалить сделку?',
+                body: 'Будет удалена только сделка «' + label + '». Остальные карточки останутся.',
+                okText: 'Удалить',
+                danger: true,
+            });
+            if (!ok) return;
+            showBusy('Удаление…');
+            try {
+                const response = await fetch('/deals/' + dealId + '/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: '{}',
+                });
+                const data = await response.json().catch(function () { return {}; });
+                if (!response.ok || data.status === 'error') {
+                    toast((data && data.message) || 'не удалось удалить', { variant: 'error', delay: 6500 });
+                    return;
+                }
+                toast(data.message || 'Сделка удалена', { variant: 'success' });
+                setTimeout(function () { window.location.href = data.redirect || '/deals/'; }, 350);
+            } catch (err) {
+                toast('Ошибка: ' + err, { variant: 'error', delay: 6500 });
+            } finally {
+                hideBusy();
+            }
+        };
+
+        document.addEventListener('click', function (event) {
+            const btn = event.target.closest('[data-delete-deal]');
+            if (!btn) return;
+            event.preventDefault();
+            event.stopPropagation();
+            window.deleteDeal(btn.getAttribute('data-delete-deal'), btn.getAttribute('data-client-name') || '');
+        });
     })();
     </script>
     {% block scripts %}{% endblock %}

@@ -6,6 +6,7 @@
 {% set completion = data.completion_percent if data else (deal.etalon_score or 0) %}
 {% set ready = data.is_complete if data else deal.can_generate_kp %}
 {% set tab = active_tab or 'main' %}
+{% set timber = (deal.kp_kind == 'timber') or (kp_meta and kp_meta.kp_kind == 'timber') %}
 
 <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
     <h2 class="mb-0">
@@ -28,6 +29,12 @@
         <a href="{{ url_for('deals.edit_deal', deal_id=deal.id) }}" class="btn btn-primary">
             <i class="bi bi-pencil"></i> Редактировать
         </a>
+        <button type="button" class="btn btn-outline-danger"
+                data-delete-deal="{{ deal.id }}"
+                data-client-name="{{ deal.client_name or '' }}"
+                title="Удалить сделку">
+            <i class="bi bi-trash"></i> Удалить
+        </button>
         {% if not ready %}
         <a href="{{ url_for('deals.incomplete_data', deal_id=deal.id) }}" class="btn btn-warning">
             <i class="bi bi-list-check"></i> Недостающие данные
@@ -231,10 +238,20 @@
             <div class="card-header"><h5 class="mb-0">Генерация КП</h5></div>
             <div class="card-body">
                 {% if ready %}
+                {% if timber %}
+                <p class="mb-3">
+                    КП дома из <strong>клееного бруса</strong> —
+                    смета по этапам + накладные 5%
+                    {% if deal.area %}· объект <strong>{{ deal.area }}</strong>{% endif %}.
+                    Ставка газобетона ({{ price_per_m2_fmt }} ₽/м²) не применяется.
+                </p>
+                {% else %}
                 <p class="mb-3">
                     Этап «Стройка»: одно КП на тёплый контур —
-                    <strong>{{ deal.area or 'площадь не указана' }}</strong> × 41&nbsp;000&nbsp;₽/м².
+                    <strong>{{ deal.area or 'площадь не указана' }}</strong>
+                    × {{ price_per_m2_fmt }}&nbsp;₽/м².
                 </p>
+                {% endif %}
                 <button class="btn btn-success btn-lg w-100 w-md-auto" type="button" onclick="generateKP({{ deal.id }})">
                     <i class="bi bi-file-pdf"></i>
                     {% if kp_meta %}Пересобрать КП{% else %}Сгенерировать КП{% endif %}
@@ -257,13 +274,34 @@
                 </span>
             </div>
             <div class="card-body">
+                {% if not timber and kp_meta.price_per_m2 and deal.price_per_m2 and kp_meta.price_per_m2 != deal.price_per_m2 %}
+                <div class="alert alert-warning">
+                    Это КП собрано по старой ставке
+                    <strong>{{ '{:,}'.format(kp_meta.price_per_m2).replace(',', ' ') }} ₽/м²</strong>.
+                    Актуальная ставка —
+                    <strong>{{ price_per_m2_fmt }} ₽/м²</strong>
+                    ({{ deal.tk_cost_fmt or '—' }}).
+                    Нажмите «Пересобрать КП», чтобы обновить PDF.
+                </div>
+                {% endif %}
                 <div class="row g-3 align-items-center">
                     <div class="col-md-8">
                         <table class="table table-sm mb-0">
                             <tr><th style="width:40%">Номер</th><td>{{ kp_meta.kp_number or '—' }}</td></tr>
+                            {% if timber %}
+                            <tr><th>Тип</th><td>Клееный брус · вариант «Стандарт»</td></tr>
+                            <tr><th>Проект</th><td>{{ kp_meta.project_name or deal.catalog_project or '—' }}</td></tr>
+                            <tr><th>Площадь / объект</th><td>{{ kp_meta.area_m2 or deal.area or '—' }}</td></tr>
+                            <tr><th>Итого (смета + 5%)</th><td><strong>{{ kp_meta.total_fmt or kp_meta.grand_total_fmt }}</strong></td></tr>
+                            {% else %}
                             <tr><th>Площадь</th><td>{{ kp_meta.area_m2 }} м²</td></tr>
-                            <tr><th>Ставка</th><td>{{ '{:,}'.format(kp_meta.price_per_m2).replace(',', ' ') }} ₽/м²</td></tr>
+                            <tr><th>Ставка</th><td>
+                                {% if kp_meta.price_per_m2 %}
+                                {{ '{:,}'.format(kp_meta.price_per_m2).replace(',', ' ') }} ₽/м²
+                                {% else %}—{% endif %}
+                            </td></tr>
                             <tr><th>Итого тёплый контур</th><td><strong>{{ kp_meta.total_fmt }}</strong></td></tr>
+                            {% endif %}
                             <tr>
                                 <th>Сформировано</th>
                                 <td>{{ kp_meta.generated_at or '—' }}{% if kp_meta.ai_used %} · тексты OpenAI{% endif %}</td>
@@ -443,6 +481,12 @@
     <a href="{{ url_for('deals.edit_deal', deal_id=deal.id) }}" class="btn btn-primary btn-sm">
         <i class="bi bi-pencil"></i> Править
     </a>
+    <button type="button" class="btn btn-outline-danger btn-sm"
+            data-delete-deal="{{ deal.id }}"
+            data-client-name="{{ deal.client_name or '' }}"
+            title="Удалить сделку">
+        <i class="bi bi-trash"></i>
+    </button>
     {% if not ready %}
     <a href="{{ url_for('deals.incomplete_data', deal_id=deal.id) }}" class="btn btn-warning btn-sm">
         <i class="bi bi-list-check"></i> Пробелы
@@ -619,7 +663,7 @@ async function sendKp(dealId, channels) {
 async function generateKP(dealId) {
     const ok = await DM.confirm({
         title: 'Сгенерировать КП?',
-        body: 'КП тёплого контура (41 000 ₽/м²) для сделки #' + dealId + '.\n\nМожет занять до 1–2 минут (AI через прокси).',
+        body: {% if timber %}'КП дома из клееного бруса (смета по этапам + 5%). Не ставка газобетона.\nСделка #' + dealId + '.\n\nМожет занять до 1–2 минут.'{% else %}'КП тёплого контура ({{ price_per_m2_fmt }} ₽/м²) для сделки #' + dealId + '.\n\nМожет занять до 1–2 минут (AI через прокси).'{% endif %},
         okText: 'Сгенерировать',
         okClass: 'btn-success',
     });

@@ -1,0 +1,226 @@
+{% extends "base_kp.html" %}
+
+{% block extra_css %}
+    .header-logo {
+      height: 42px;
+      width: auto;
+      display: block;
+      margin-bottom: 4px;
+    }
+    .contacts-brand {
+      background: #2b2b2b;
+      color: #ffffff;
+      padding: 14px 16px;
+      border-radius: 6px;
+      font-size: 8.5pt;
+    }
+    .contacts-brand a { color: #ffffff; text-decoration: none; }
+    .contacts-brand .phone-lbl {
+      font-size: 8pt;
+      color: #d8dee8;
+      margin-top: 8px;
+    }
+    .contacts-brand .phone {
+      font-size: 16pt;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      margin: 2px 0 8px;
+    }
+    .contacts-brand .contacts-line { margin-bottom: 3px; }
+    .socials-row {
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+    .socials-row td {
+      padding: 0 8px 0 0;
+      vertical-align: middle;
+    }
+    .socials-row img {
+      width: 28px;
+      height: 28px;
+      display: block;
+    }
+{% endblock %}
+
+{% block header %}
+      <div class="header">
+        <div class="header-left">
+          {% if logo_url %}
+          <img class="header-logo" src="{{ logo_url }}" alt="{{ company_name }}" />
+          {% else %}
+          <div class="company">«{{ company_name }}»</div>
+          {% endif %}
+          <div class="company-sub">{{ company_tagline }}</div>
+          <div class="doc-type">Коммерческое предложение</div>
+        </div>
+        <div class="header-right">
+          {% if kp_number %}№ {{ kp_number }} от {{ current_date }}<br/>{% else %}{{ current_date }}<br/>{% endif %}
+          {% if valid_until %}Действительно до: {{ valid_until }}{% endif %}
+        </div>
+      </div>
+{% endblock %}
+
+{% block content %}
+  <div class="badge">{{ variant_label }}</div>
+  <h1>{{ title }}</h1>
+
+  <table class="meta">
+    <tr><td class="lbl">Кому</td><td class="val">{{ client_name }}</td></tr>
+    <tr><td class="lbl">Дата</td><td class="val">{{ current_date }}</td></tr>
+    <tr><td class="lbl">Объект</td><td class="val">{{ project_name }}</td></tr>
+    {% if area_note %}<tr><td class="lbl">Площадь</td><td class="val">{{ area_note }}</td></tr>{% endif %}
+    {% if manager %}<tr><td class="lbl">Менеджер</td><td class="val">{{ manager }}</td></tr>{% endif %}
+  </table>
+
+  <div class="price-strip">
+    <div class="price-cell">
+      <div class="lbl">По разделам</div>
+      <div class="val">{{ subtotal_fmt }} ₽</div>
+    </div>
+    <div class="price-cell">
+      <div class="lbl">Накладные {{ overhead_pct }}%</div>
+      <div class="val">{{ overhead_fmt }} ₽</div>
+    </div>
+    <div class="price-cell">
+      <div class="lbl">Итого</div>
+      <div class="val">{{ grand_total_fmt }} ₽</div>
+    </div>
+  </div>
+
+  <h2>1. Варианты КП</h2>
+  <table class="variants">
+    <tr>
+      {% for v in variants %}
+      <td class="{% if v.selected %}selected{% endif %}">
+        Вариант {{ loop.index }} — {{ v.name }}
+        {% if v.selected %}<br/><span style="font-weight:400;color:#5a6577;">детализация ниже</span>{% endif %}
+      </td>
+      {% endfor %}
+    </tr>
+  </table>
+
+  <h2>2. Детализация по этапам ({{ selected_variant }})</h2>
+
+  {% for section in sections %}
+  <h3>{{ section.title }}</h3>
+  <table class="items">
+    <thead>
+      <tr>
+        <th style="width:5%">№</th>
+        <th style="width:32%">Наименование работ и материалов</th>
+        <th style="width:9%" class="num">Кол-во</th>
+        <th style="width:8%">Ед.</th>
+        <th style="width:15%" class="num">Материал, ₽</th>
+        <th style="width:15%" class="num">Работа, ₽</th>
+        <th style="width:16%" class="num">Всего, ₽</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in section.rows %}
+      <tr>
+        <td class="center">{{ loop.index }}</td>
+        <td>{{ item.name }}</td>
+        <td class="num">{{ item.qty_fmt }}</td>
+        <td>{{ item.unit }}</td>
+        <td class="num">{{ item.material_fmt }}</td>
+        <td class="num">{{ item.work_fmt }}</td>
+        <td class="num">{{ item.total_fmt }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="section-total">Итого «{{ section.short }}»: {{ section.total_fmt }} ₽</p>
+  {% endfor %}
+
+  <h2>3. Сводная таблица по разделам</h2>
+  <table class="items">
+    <thead>
+      <tr>
+        <th>Раздел</th>
+        <th class="num" style="width:28%">Стоимость, ₽</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for section in sections %}
+      <tr>
+        <td>{{ section.short }}</td>
+        <td class="num">{{ section.total_fmt }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="total-box">
+    <div class="total-row">
+      <div class="total-label">Итого по разделам</div>
+      <div class="total-value">{{ subtotal_fmt }} ₽</div>
+    </div>
+    <div class="total-row">
+      <div class="total-label">Накладные расходы {{ overhead_pct }}%</div>
+      <div class="total-value">{{ overhead_fmt }} ₽</div>
+    </div>
+    <div class="total-row total-grand">
+      <div class="total-label">ИТОГО с накладными</div>
+      <div class="total-value">{{ grand_total_fmt }} ₽</div>
+    </div>
+  </div>
+
+  <h2>4. Что входит / не входит</h2>
+  <table class="two-col">
+    <tr>
+      <td>
+        <div class="box">
+          <strong>Входит:</strong>
+          <ul class="compact">
+            {% for x in included %}<li>{{ x }}</li>{% endfor %}
+          </ul>
+        </div>
+      </td>
+      <td>
+        <div class="box">
+          <strong>Не входит:</strong>
+          <ul class="compact">
+            {% for x in excluded %}<li>{{ x }}</li>{% endfor %}
+          </ul>
+        </div>
+      </td>
+    </tr>
+  </table>
+
+  <h2>5. Гарантии</h2>
+  <ul class="compact">
+    {% for x in warranty %}<li>{{ x }}</li>{% endfor %}
+  </ul>
+
+  <h2>6. Следующий шаг</h2>
+  <ol class="compact" style="padding-left:18px;">
+    {% for step in next_steps %}<li>{{ step }}</li>{% endfor %}
+  </ol>
+
+  <h2>7. Контакты</h2>
+  <div class="contacts-brand">
+    <strong>{{ company_legal }}</strong>
+    <div class="phone-lbl">Номер телефона</div>
+    <div class="phone">{{ phone }}</div>
+    {% if phone_free %}<div class="contacts-line">Бесплатно: {{ phone_free }}</div>{% endif %}
+    {% if email %}<div class="contacts-line">{{ email }}</div>{% endif %}
+    {% if address %}<div class="contacts-line">{{ address }}</div>{% endif %}
+    {% if website %}<div class="contacts-line">{{ website }}</div>{% endif %}
+    {% if socials %}
+    <table class="socials-row">
+      <tr>
+        {% for s in socials %}
+        <td>
+          <a href="{{ s.url }}"><img src="{{ s.icon }}" alt="{{ s.name }}" width="28" height="28"/></a>
+        </td>
+        {% endfor %}
+      </tr>
+    </table>
+    {% endif %}
+  </div>
+{% endblock %}
+
+{% block footer_note %}
+КП подготовлено на основе протокола телефонного разговора № {{ protocol_number or 'XX/XX' }}.
+Цены ориентировочные для {{ region }}; итоговая смета уточняется после выбора проекта и выезда на участок.
+{% endblock %}

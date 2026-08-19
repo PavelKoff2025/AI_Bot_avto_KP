@@ -79,6 +79,12 @@ CLIENT_HELLO = (
     "Ваш ID: команда /myid"
 )
 
+MANAGER_HELLO = (
+    "Привет! Это <b>OfferDesk</b> — рабочее место ОП «Дом-Мастер».\n\n"
+    "Клиенту для привязки сделки отправьте ссылку из CRM "
+    "(кнопка «Привязать Telegram»)."
+)
+
 
 async def _deny_if_forbidden(message_or_cb: Message | CallbackQuery) -> bool:
     """True = доступ запрещён (уже ответили пользователю)."""
@@ -231,9 +237,9 @@ async def notify_error(target: Message | CallbackQuery, text: str) -> None:
 
 async def cmd_start(message: Message, state: FSMContext, command: CommandObject) -> None:
     """
-    /start — менеджер (только TELEGRAM_ALLOWED_IDS).
+    /start — менеджер (только TELEGRAM_ALLOWED_IDS): CRM, не транскрибация в чат.
     /start deal_123 — клиент привязывает chat_id к сделке (без allowlist).
-    Обычный /start у клиента — короткое клиентское приветствие (не промпт про .txt).
+    Обычный /start у клиента — короткое клиентское приветствие.
     """
     args = (command.args or "").strip()
     if args.lower().startswith("deal_"):
@@ -249,16 +255,7 @@ async def cmd_start(message: Message, state: FSMContext, command: CommandObject)
 
     logger.info("[%s] /start — новая сессия менеджера", _user_tag(message))
     await state.clear()
-    await state.set_state(Flow.waiting_transcription)
-    await message.answer(
-        "Привет! Это <b>OfferDesk</b> — рабочее место ОП «Дом-Мастер».\n\n"
-        "Пришлите <b>.txt</b> с транскрибацией звонка (документом) "
-        "или вставьте текст сообщением.\n\n"
-        "Сверю данные с эталоном и скажу, хватает ли информации для КП.\n\n"
-        "Клиенту для привязки сделки отправьте ссылку из CRM "
-        "(кнопка «Привязать Telegram»).",
-        parse_mode="HTML",
-    )
+    await message.answer(MANAGER_HELLO, parse_mode="HTML")
 
 
 async def _bind_client_from_start(message: Message, args: str) -> None:
@@ -354,13 +351,10 @@ async def cmd_help(message: Message) -> None:
         "/start — начать заново\n"
         "/help — справка\n"
         "/myid — показать ваш Telegram ID\n\n"
+        "Транскрибацию и КП ведите в CRM. Этот чат — привязка клиента "
+        "и доставка КП.\n\n"
         "Клиент: откройте ссылку из CRM вида t.me/…?start=deal_N — "
-        "так привяжется chat_id для отправки КП.\n\n"
-        "Варианты КП:\n"
-        "• Базовый — газобетон\n"
-        "• Средний + — газобетон усиленный\n"
-        "• Средний (оптимальный) — клееный брус\n\n"
-        "К КП можно приложить АР (проект дома) и ИР (инженерка).",
+        "так привяжется chat_id для отправки КП.",
     )
 
 
@@ -809,27 +803,24 @@ async def on_action(callback: CallbackQuery, state: FSMContext) -> None:
         await callback.answer()
         logger.info("[%s] сессия сброшена (/restart)", _user_tag(callback))
         await state.clear()
-        await state.set_state(Flow.waiting_transcription)
         await callback.message.answer(  # type: ignore[union-attr]
-            "Ок. Пришлите новую транскрибацию (.txt или текстом)."
+            MANAGER_HELLO,
+            parse_mode="HTML",
         )
         return
 
     await callback.answer("Неизвестное действие", show_alert=True)
 
 
-async def on_stale_callback(callback: CallbackQuery, state: FSMContext) -> None:
+async def on_stale_callback(callback: CallbackQuery) -> None:
     """Устаревшие кнопки после /start или рестарта процесса."""
     if await _deny_if_forbidden(callback):
         return
     logger.info("[%s] устаревший callback: %s", _user_tag(callback), callback.data)
     await callback.answer("Сессия устарела — нажмите /start", show_alert=True)
-    current = await state.get_state()
-    if current is None:
-        await state.set_state(Flow.waiting_transcription)
     if callback.message:
         await callback.message.answer(
-            "Эта кнопка больше не действует. Нажмите /start и пришлите транскрибацию."
+            "Эта кнопка больше не действует. Нажмите /start."
         )
 
 

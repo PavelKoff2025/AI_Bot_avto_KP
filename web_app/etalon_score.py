@@ -21,6 +21,11 @@ ETALON_FIELDS: tuple[tuple[str, str], ...] = (
     ("funding_source", "Финансирование"),
 )
 
+# Доп. поле эталона для домов из клееного бруса (каталог «Дом Форест»)
+TIMBER_ETALON_EXTRA: tuple[tuple[str, str], ...] = (
+    ("catalog_project", "Проект каталога"),
+)
+
 # Подсказки менеджеру: какие вопросы задать клиенту по недостающему полю
 FIELD_QUESTIONS: dict[str, str] = {
     "client_phone": "Подскажите, пожалуйста, удобный номер телефона для связи?",
@@ -31,9 +36,34 @@ FIELD_QUESTIONS: dict[str, str] = {
     "material": "Подтверждаем стены из газобетона (стандарт «Дом-Мастер»)?",
     "timeline": "Когда планируете стартовать строительство (месяц/сезон и год)?",
     "funding_source": "Как планируете финансировать: свои средства, ипотека, маткапитал?",
+    "catalog_project": (
+        "Какой проект из каталога «Дом Форест» рассматриваем "
+        "(Сириус 2.0, Альба, Оптимус… или индивидуальный)?"
+    ),
 }
 
 EMPTY_MARKERS = {"", "—", "-", "None", "null", "none"}
+
+
+def _is_timber_deal(get) -> bool:
+    try:
+        from pricing import is_timber_material
+    except ImportError:  # pragma: no cover
+        def is_timber_material(raw):  # type: ignore[misc]
+            text = str(raw or "").lower()
+            return "клеен" in text or "брус" in text
+
+    return is_timber_material(get("material")) or is_timber_material(get("transcript"))
+
+
+def etalon_fields_for(deal: Mapping[str, Any] | Any | None = None) -> tuple[tuple[str, str], ...]:
+    """7 полей «Дом-Мастер»; для клееного бруса + проект из каталога."""
+    if deal is None:
+        return ETALON_FIELDS
+    get = deal.get if isinstance(deal, Mapping) else lambda k, d=None: deal[k] if k in deal.keys() else d
+    if _is_timber_deal(get):
+        return ETALON_FIELDS + TIMBER_ETALON_EXTRA
+    return ETALON_FIELDS
 
 
 def _filled(value: Any) -> bool:
@@ -55,7 +85,7 @@ def etalon_match_score(deal: Mapping[str, Any] | Any) -> dict[str, Any]:
     missing_keys: list[str] = []
     questions: list[str] = []
 
-    for key, label in ETALON_FIELDS:
+    for key, label in etalon_fields_for(deal):
         try:
             value = get(key)
         except (KeyError, IndexError, TypeError):
@@ -69,7 +99,8 @@ def etalon_match_score(deal: Mapping[str, Any] | Any) -> dict[str, Any]:
             if question:
                 questions.append(question)
 
-    total = len(ETALON_FIELDS)
+    fields = etalon_fields_for(deal)
+    total = len(fields)
     filled = len(present)
     score = int(round(100 * filled / total)) if total else 0
 
@@ -80,6 +111,10 @@ def etalon_match_score(deal: Mapping[str, Any] | Any) -> dict[str, Any]:
     else:
         grade = "low"
 
+    catalog_ok = True
+    if _is_timber_deal(get) and not _filled(get("catalog_project")):
+        catalog_ok = False
+
     return {
         "score": score,
         "grade": grade,
@@ -89,7 +124,7 @@ def etalon_match_score(deal: Mapping[str, Any] | Any) -> dict[str, Any]:
         "missing": missing,
         "missing_keys": missing_keys,
         "questions": questions,
-        "can_generate_kp": score >= KP_THRESHOLD,
+        "can_generate_kp": score >= KP_THRESHOLD and catalog_ok,
         "is_complete": score >= 100,
         "threshold": KP_THRESHOLD,
     }

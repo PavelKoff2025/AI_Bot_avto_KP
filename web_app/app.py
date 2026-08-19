@@ -27,11 +27,30 @@ from routes_deals import deals_bp
 from routes_admin import admin_bp
 from db_utils import connect_db
 from etalon_score import etalon_match_score
-from pricing import apply_tk_cost
+from pricing import PRICE_PER_M2, apply_tk_cost
+from authz import is_service_admin
 
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'dev-secret-key')
+
+
+@app.context_processor
+def inject_pricing():
+    """Ставка тёплого контура, каталог бруса и роль во всех шаблонах CRM."""
+    try:
+        from utils.timber_catalog import CATALOG_PROJECTS, catalog_label
+        timber_catalog = CATALOG_PROJECTS
+    except Exception:
+        timber_catalog = ()
+        catalog_label = lambda p: p.get("name", "")  # noqa: E731
+    return {
+        "price_per_m2": PRICE_PER_M2,
+        "price_per_m2_fmt": f"{PRICE_PER_M2:,}".replace(",", "\u00a0"),
+        "is_admin": is_service_admin(),
+        "timber_catalog": timber_catalog,
+        "catalog_label": catalog_label,
+    }
 
 
 @app.template_filter('from_json')

@@ -54,10 +54,17 @@ def render_html(data: dict[str, Any], template_name: str = "report_template.html
         **data,
         "preview_image": _as_file_uri(data.get("preview_image")),
         "floor_plan_image": _as_file_uri(data.get("floor_plan_image")),
+        "logo_url": _as_file_uri(data.get("logo_url")),
         "generated_at": datetime.now().strftime("%d.%m.%Y %H:%M"),
         "font_regular": _font_url("DejaVuSans.ttf"),
         "font_bold": _font_url("DejaVuSans-Bold.ttf"),
     }
+    socials = data.get("socials") or []
+    if socials:
+        context["socials"] = [
+            {**dict(item), "icon": _as_file_uri(item.get("icon"))}
+            for item in socials
+        ]
     return template.render(**context)
 
 

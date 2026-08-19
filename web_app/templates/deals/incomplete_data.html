@@ -166,7 +166,7 @@ function copyScript() {
 async function generateKP() {
     const ok = await DM.confirm({
         title: 'Сгенерировать КП?',
-        body: 'КП тёплого контура (41 000 ₽/м²).',
+        body: 'КП тёплого контура ({{ price_per_m2_fmt }} ₽/м²).',
         okText: 'Сгенерировать',
         okClass: 'btn-success',
     });
