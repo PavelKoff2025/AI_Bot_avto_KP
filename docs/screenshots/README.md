@@ -5,5 +5,6 @@
 После добавления файлов можно вставить их в README, например:
 
 ```markdown
-![Диалог бота](docs/screenshots/bot_flow.png)
+![Дашборд CRM](docs/screenshots/dashboard.png)
+![Карточка сделки](docs/screenshots/deal_card.png)
 ```
