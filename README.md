@@ -18,6 +18,7 @@
 📡 **OpenAPI 3.1:** [`docs/openapi.yaml`](docs/openapi.yaml)  
 🐳 **Docker:** [`docs/DOCKER.md`](docs/DOCKER.md) · **Docker Hub → сервер:** [`docs/DOCKER_HUB.md`](docs/DOCKER_HUB.md)  
 📄 **Отчёт для куратора:** [`docs/ОТЧЁТ_ДЛЯ_КУРАТОРА_AI_автоматизация.md`](docs/ОТЧЁТ_ДЛЯ_КУРАТОРА_AI_автоматизация.md)  
+📊 **Бизнес-презентация:** [`docs/2026-08-21_offerdesk_biz-presentation.pdf`](docs/2026-08-21_offerdesk_biz-presentation.pdf)  
 🔍 **Аудит кода:** [`AUDIT.md`](AUDIT.md)
 
 ---
